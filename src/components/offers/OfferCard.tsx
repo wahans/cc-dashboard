@@ -124,6 +124,14 @@ function formatExpiry(dateStr: string | null): { text: string; urgent: boolean }
   return { text: formatted, urgent: false }
 }
 
+type RewardType = 'all' | 'points' | 'cash'
+type MinReward = 'any' | '5k' | '25k'
+
+const MIN_THRESHOLDS: Record<Exclude<MinReward, 'any'>, { points: number; cash: number }> = {
+  '5k':  { points: 5000,  cash: 500 },
+  '25k': { points: 25000, cash: 2500 },
+}
+
 function isExpiringSoon(dateStr: string | null): boolean {
   if (!dateStr) return false
   const days = daysUntil(dateStr)
@@ -376,11 +384,22 @@ function MerchantGroupRow({
   onToggle: () => void
   onToggleEnroll: (id: string) => Promise<void>
 }) {
+  const [enrolling, setEnrolling] = useState(false)
   const { bestOffer, offers, hasEnrolled, earliestExpiry } = group
   const category = getCategory(bestOffer.merchant)
   const reward = formatReward(bestOffer)
   const expiry = formatExpiry(earliestExpiry)
   const extra = offers.length - 1
+
+  async function handleEnroll(e: React.MouseEvent) {
+    e.stopPropagation()
+    setEnrolling(true)
+    try {
+      await onToggleEnroll(bestOffer.id)
+    } finally {
+      setEnrolling(false)
+    }
+  }
 
   return (
     <>
@@ -478,11 +497,21 @@ function MerchantGroupRow({
           )}
         </div>
 
-        {/* Offer count */}
+        {/* Enroll best offer */}
         <div className="px-2 flex justify-end">
-          <span className="text-[12px] text-gray-400 tabular-nums">
-            {offers.length} {offers.length === 1 ? 'offer' : 'offers'}
-          </span>
+          <button
+            type="button"
+            onClick={handleEnroll}
+            disabled={enrolling}
+            className={[
+              'text-[12px] font-semibold transition-colors disabled:opacity-30',
+              bestOffer.is_enrolled
+                ? 'text-gray-400 hover:text-gray-700'
+                : 'text-blue-600 hover:text-blue-800',
+            ].join(' ')}
+          >
+            {enrolling ? '…' : bestOffer.is_enrolled ? 'Unenroll' : 'Enroll'}
+          </button>
         </div>
       </div>
 
@@ -523,15 +552,30 @@ function MerchantGroupRow({
             {reward.text}
           </span>
         </div>
-        <div className="flex items-center gap-2 mt-0.5 ml-5">
-          <span className="text-[10px] font-medium border border-gray-200 rounded px-1.5 py-0.5 text-gray-500 leading-tight shrink-0">
-            {category.emoji} {category.label}
-          </span>
-          {expiry && (
-            <span className={`text-[12px] tabular-nums ${expiry.urgent ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
-              {expiry.text}
+        <div className="flex items-center justify-between mt-0.5 ml-5">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-medium border border-gray-200 rounded px-1.5 py-0.5 text-gray-500 leading-tight shrink-0">
+              {category.emoji} {category.label}
             </span>
-          )}
+            {expiry && (
+              <span className={`text-[12px] tabular-nums ${expiry.urgent ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+                {expiry.text}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleEnroll}
+            disabled={enrolling}
+            className={[
+              'text-[13px] font-semibold transition-colors disabled:opacity-30 pl-3',
+              bestOffer.is_enrolled
+                ? 'text-gray-400 hover:text-gray-700'
+                : 'text-blue-600 hover:text-blue-800',
+            ].join(' ')}
+          >
+            {enrolling ? '…' : bestOffer.is_enrolled ? 'Unenroll' : 'Enroll'}
+          </button>
         </div>
       </div>
 
@@ -591,6 +635,8 @@ export function OffersTable({ offers: initial, lastSyncedAt }: { offers: Offer[]
   const [offers, setOffers] = useState(initial)
   const [sortBy, setSortBy] = useState<SortKey>('reward')
   const [filterBy, setFilterBy] = useState<FilterKey>('all')
+  const [rewardType, setRewardType] = useState<RewardType>('all')
+  const [minReward, setMinReward] = useState<MinReward>('any')
   const router = useRouter()
   const [syncing, setSyncing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -652,8 +698,22 @@ export function OffersTable({ offers: initial, lastSyncedAt }: { offers: Offer[]
     else if (filterBy === 'expiring') result = result.filter((o) => isExpiringSoon(o.expiration_date))
     else if (filterBy !== 'all')
       result = result.filter((o) => getCategory(o.merchant).label === filterBy)
+
+    if (rewardType !== 'all')
+      result = result.filter((o) => o.reward_type === rewardType)
+
+    if (minReward !== 'any') {
+      const thresh = MIN_THRESHOLDS[minReward]
+      result = result.filter((o) => {
+        if (!o.reward_amount_cents) return false
+        return o.reward_type === 'points'
+          ? o.reward_amount_cents >= thresh.points
+          : o.reward_amount_cents >= thresh.cash
+      })
+    }
+
     return result
-  }, [offers, filterBy, searchQuery])
+  }, [offers, filterBy, rewardType, minReward, searchQuery])
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -731,7 +791,21 @@ export function OffersTable({ offers: initial, lastSyncedAt }: { offers: Offer[]
             </FilterChip>
           </div>
         </div>
-        {/* Row 2: category chips — horizontally scrollable */}
+        {/* Row 2: reward type + min threshold */}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-0.5">
+            <FilterChip active={rewardType === 'all'} onClick={() => setRewardType('all')}>All</FilterChip>
+            <FilterChip active={rewardType === 'points'} onClick={() => setRewardType('points')}>Points</FilterChip>
+            <FilterChip active={rewardType === 'cash'} onClick={() => setRewardType('cash')}>Cash</FilterChip>
+          </div>
+          <div className="h-3 w-px bg-gray-200 shrink-0" />
+          <div className="flex gap-0.5">
+            <FilterChip active={minReward === 'any'} onClick={() => setMinReward('any')}>Any</FilterChip>
+            <FilterChip active={minReward === '5k'} onClick={() => setMinReward('5k')}>5k pts · $5+</FilterChip>
+            <FilterChip active={minReward === '25k'} onClick={() => setMinReward('25k')}>25k pts · $25+</FilterChip>
+          </div>
+        </div>
+        {/* Row 3: category chips — horizontally scrollable */}
         <div className="flex gap-0.5 overflow-x-auto [&::-webkit-scrollbar]:hidden pb-0.5" style={{ scrollbarWidth: 'none' }}>
           {uniqueCategories.map((cat) => (
             <FilterChip key={cat} active={filterBy === cat} onClick={() => setFilterBy(cat)}>
@@ -773,7 +847,7 @@ export function OffersTable({ offers: initial, lastSyncedAt }: { offers: Offer[]
           <ColHeader align="right">% Return</ColHeader>
           <ColHeader>Expires</ColHeader>
           <ColHeader align="center">Status</ColHeader>
-          <ColHeader align="right">{useFlat ? 'Action' : 'Offers'}</ColHeader>
+          <ColHeader align="right">Action</ColHeader>
         </div>
 
         {useFlat ? (
