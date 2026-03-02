@@ -19,6 +19,7 @@ export type OtherCategory = {
   category_name: string
   earn_rate: number
   earn_type: EarnType
+  effective_cpd: number
   notes: string | null
 }
 
@@ -28,10 +29,30 @@ export type CardResult = {
   card: Card
   earn_rate: number
   earn_type: EarnType
+  effective_cpd: number
   category_matched: string
   match_reason: MatchReason
   notes: string | null
   other_categories: OtherCategory[]
+}
+
+// ─── Points valuation (cents per point/mile) ──────────────────────────────────
+
+// Industry-standard redemption valuations
+const CPP: Record<string, number> = {
+  'MR':        2.0,   // Amex Membership Rewards
+  'Miles':     1.4,   // Alaska miles
+  'Cash Back': 1.0,   // Cashback (1¢ per cent)
+}
+
+// Returns effective cents per dollar spent
+function effectiveCPD(earn_rate: number, earn_type: EarnType, reward_currency: string): number {
+  if (earn_type === 'multiplier') {
+    const cpp = CPP[reward_currency] ?? 1.0
+    return earn_rate * cpp
+  }
+  // percent / cashback: earn_rate is already in percent (e.g. 3 = 3%)
+  return earn_rate
 }
 
 // ─── Merchant alias map ───────────────────────────────────────────────────────
@@ -230,18 +251,20 @@ export function getCardResults(query: string, cards: Card[]): CardResult[] {
 
       const other_categories = card.card_categories
         .filter((c) => c.category_name !== matched.category_name)
-        .sort((a, b) => b.earn_rate - a.earn_rate)
         .map((c) => ({
           category_name: c.category_name,
           earn_rate: c.earn_rate,
           earn_type: c.earn_type,
+          effective_cpd: effectiveCPD(c.earn_rate, c.earn_type, card.reward_currency),
           notes: c.notes,
         }))
+        .sort((a, b) => b.effective_cpd - a.effective_cpd)
 
       return {
         card,
         earn_rate: matched.earn_rate,
         earn_type: matched.earn_type,
+        effective_cpd: effectiveCPD(matched.earn_rate, matched.earn_type, card.reward_currency),
         category_matched: matched.category_name,
         match_reason: reason,
         notes: matched.notes,
@@ -249,7 +272,7 @@ export function getCardResults(query: string, cards: Card[]): CardResult[] {
       }
     })
     .filter((r): r is CardResult => r !== null)
-    .sort((a, b) => b.earn_rate - a.earn_rate)
+    .sort((a, b) => b.effective_cpd - a.effective_cpd)
 }
 
 export { getCardResults as getBestCard }

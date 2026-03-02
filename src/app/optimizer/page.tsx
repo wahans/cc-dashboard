@@ -25,6 +25,12 @@ function formatRateShort(rate: number, type: string): string {
   return `${rate}%`
 }
 
+function formatCPD(cpd: number): string {
+  // e.g. 10.0 → "10¢/$1", 4.2 → "4.2¢/$1"
+  const rounded = Math.round(cpd * 10) / 10
+  return `${rounded}¢/$1`
+}
+
 function formatCategoryName(slug: string): string {
   return slug.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -49,7 +55,7 @@ function MatchBadge({ reason, categoryMatched }: { reason: MatchReason; category
 function CardResultBlock({ result, rank }: { result: CardResult; rank: number }) {
   const [expanded, setExpanded] = useState(false)
   const isBest = rank === 0
-  const { card, earn_rate, earn_type, category_matched, match_reason, notes, other_categories } = result
+  const { card, earn_rate, earn_type, effective_cpd, category_matched, match_reason, notes, other_categories } = result
 
   return (
     <div
@@ -77,14 +83,19 @@ function CardResultBlock({ result, rank }: { result: CardResult; rank: number })
           <MatchBadge reason={match_reason} categoryMatched={category_matched} />
         </div>
         <div className="shrink-0 flex items-center gap-3">
-          <span
-            className={[
-              'font-[var(--font-geist-mono)] text-[18px] font-bold tabular-nums',
-              earn_type === 'multiplier' ? 'text-green-700' : 'text-blue-700',
-            ].join(' ')}
-          >
-            {formatRate(earn_rate, earn_type, card.reward_currency)}
-          </span>
+          <div className="text-right">
+            <div
+              className={[
+                'font-[var(--font-geist-mono)] text-[18px] font-bold tabular-nums leading-tight',
+                earn_type === 'multiplier' ? 'text-green-700' : 'text-blue-700',
+              ].join(' ')}
+            >
+              {formatRate(earn_rate, earn_type, card.reward_currency)}
+            </div>
+            <div className="text-[11px] text-gray-400 tabular-nums">
+              ~{formatCPD(effective_cpd)}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -117,10 +128,15 @@ function CardResultBlock({ result, rank }: { result: CardResult; rank: number })
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-[var(--font-geist-mono)] text-[12px] font-semibold text-green-700">
-                    {formatRateShort(earn_rate, earn_type)}
-                  </span>
-                  {notes && <span className="text-[10px] text-gray-400 truncate max-w-[200px]">{notes}</span>}
+                  <div className="text-right">
+                    <div className="font-[var(--font-geist-mono)] text-[12px] font-semibold text-green-700 leading-tight">
+                      {formatRateShort(earn_rate, earn_type)}
+                    </div>
+                    <div className="text-[10px] text-gray-400 tabular-nums">
+                      ~{formatCPD(effective_cpd)}
+                    </div>
+                  </div>
+                  {notes && <span className="text-[10px] text-gray-400 truncate max-w-[160px]">{notes}</span>}
                 </div>
               </div>
 
@@ -134,11 +150,16 @@ function CardResultBlock({ result, rank }: { result: CardResult; rank: number })
                     {formatCategoryName(oc.category_name)}
                   </span>
                   <div className="flex items-center gap-3">
-                    <span className="font-[var(--font-geist-mono)] text-[12px] text-gray-700 tabular-nums">
-                      {formatRateShort(oc.earn_rate, oc.earn_type)}
-                    </span>
+                    <div className="text-right">
+                      <div className="font-[var(--font-geist-mono)] text-[12px] text-gray-700 tabular-nums leading-tight">
+                        {formatRateShort(oc.earn_rate, oc.earn_type)}
+                      </div>
+                      <div className="text-[10px] text-gray-400 tabular-nums">
+                        ~{formatCPD(oc.effective_cpd)}
+                      </div>
+                    </div>
                     {oc.notes && (
-                      <span className="text-[10px] text-gray-400 truncate max-w-[200px]">{oc.notes}</span>
+                      <span className="text-[10px] text-gray-400 truncate max-w-[160px]">{oc.notes}</span>
                     )}
                   </div>
                 </div>
