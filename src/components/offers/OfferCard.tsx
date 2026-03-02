@@ -57,7 +57,7 @@ const CATEGORIES: Array<{ label: string; emoji: string; pattern: RegExp }> = [
     pattern: /simplisafe|\barlo\b|american home shield|renuity\b|mattress\b|avocado.*mattress|cocoon.*sealy|sleep outfitters|mattress firm|cozy earth|cuddledown|linensandhutch|linens.*hutch|little sleepies|lovetodream|love to dream|\bikea\b|crate.*barrel|ballard designs|blu dot\b|floor.*decor\b|tilebar|rugs\.com|lampsplus|lamps plus|jonathan adler|simplehuman|\bwhisker\b|litter.robot|irobot\b|\bbissell\b|charbroil\b|county tv|yudin|happiestbaby|happiest baby|gardyn\b|\bpura\b|laundrysauce|laundry sauce|rocco.*fridge|bed bath|bedbath|nuna baby|bugaboo\b|miraclebrand|miracle brand|home security|home warranty|home improvement|home decor|appliance|bedding\b|pillow\b|blanket\b|furniture\b/i,
   },
   {
-    label: 'Events',
+    label: 'Entertainment',
     emoji: '🎭',
     pattern: /ticket\b|venue\b|concert\b|broadway|theater\b|theatre\b|goldenvoice|gametime\b|megaseats|todaytix|telecharge|bowery presents|peacock theater|eventticketscenter|ticketsmarter|nba store|nbastore|nhl shop|\bwwe\b|fanatics\b|delta center team|disney\+|hulu\b|hbo\b|directv|fubo\b|paramount\+|starz\b|youtube tv|fanduel sports|cnbc pro|\bcnn\b|the motley fool|the atlantic\b|ancestry\b|\blids\b|jdsports|jd sports|live.*music|live.*sport|streaming.*tv|sports.*network/i,
   },
@@ -523,13 +523,16 @@ function MerchantGroupRow({
             {reward.text}
           </span>
         </div>
-        {expiry && (
-          <div className="mt-0.5 ml-5">
+        <div className="flex items-center gap-2 mt-0.5 ml-5">
+          <span className="text-[10px] font-medium border border-gray-200 rounded px-1.5 py-0.5 text-gray-500 leading-tight shrink-0">
+            {category.emoji} {category.label}
+          </span>
+          {expiry && (
             <span className={`text-[12px] tabular-nums ${expiry.urgent ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
               {expiry.text}
             </span>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── Expanded sub-rows ── */}
@@ -709,21 +712,27 @@ export function OffersTable({ offers: initial, lastSyncedAt }: { offers: Offer[]
       </div>
 
       {/* ── Toolbar ── */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
-        <div className="flex gap-0.5">
-          <SortPill active={sortBy === 'reward'} onClick={() => setSortBy('reward')}>Reward ↓</SortPill>
-          <SortPill active={sortBy === 'expiry'} onClick={() => setSortBy('expiry')}>Expiry ↑</SortPill>
-          <SortPill active={sortBy === 'merchant'} onClick={() => setSortBy('merchant')}>Merchant A–Z</SortPill>
-          <SortPill active={sortBy === 'return'} onClick={() => setSortBy('return')}>% Return ↓</SortPill>
+      <div className="flex flex-col gap-1.5 mb-3">
+        {/* Row 1: sort pills + status filters */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex gap-0.5">
+            <SortPill active={sortBy === 'reward'} onClick={() => setSortBy('reward')}>Reward ↓</SortPill>
+            <SortPill active={sortBy === 'expiry'} onClick={() => setSortBy('expiry')}>Expiry ↑</SortPill>
+            <SortPill active={sortBy === 'merchant'} onClick={() => setSortBy('merchant')}>A–Z</SortPill>
+            <SortPill active={sortBy === 'return'} onClick={() => setSortBy('return')}>% Return ↓</SortPill>
+          </div>
+          <div className="flex gap-0.5">
+            <FilterChip active={filterBy === 'all'} onClick={() => setFilterBy('all')}>All</FilterChip>
+            <FilterChip active={filterBy === 'enrolled'} onClick={() => setFilterBy('enrolled')}>
+              Enrolled ({enrolledCount})
+            </FilterChip>
+            <FilterChip active={filterBy === 'expiring'} onClick={() => setFilterBy('expiring')}>
+              Expiring ({expiringSoonCount})
+            </FilterChip>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-0.5 justify-end">
-          <FilterChip active={filterBy === 'all'} onClick={() => setFilterBy('all')}>All</FilterChip>
-          <FilterChip active={filterBy === 'enrolled'} onClick={() => setFilterBy('enrolled')}>
-            Enrolled ({enrolledCount})
-          </FilterChip>
-          <FilterChip active={filterBy === 'expiring'} onClick={() => setFilterBy('expiring')}>
-            Expiring Soon ({expiringSoonCount})
-          </FilterChip>
+        {/* Row 2: category chips — horizontally scrollable */}
+        <div className="flex gap-0.5 overflow-x-auto [&::-webkit-scrollbar]:hidden pb-0.5" style={{ scrollbarWidth: 'none' }}>
           {uniqueCategories.map((cat) => (
             <FilterChip key={cat} active={filterBy === cat} onClick={() => setFilterBy(cat)}>
               {cat}
