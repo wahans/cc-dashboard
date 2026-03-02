@@ -26,13 +26,56 @@ type SortKey = 'reward' | 'expiry' | 'merchant' | 'return'
 type FilterKey = 'all' | 'enrolled' | 'expiring' | string
 
 const CATEGORIES: Array<{ label: string; emoji: string; pattern: RegExp }> = [
-  { label: 'Travel', emoji: '✈', pattern: /airline|hotel|marriott|hilton|hyatt|delta|united|american air|southwest|airbnb|hertz|avis|car rental|travel|resort|cruise|expedia|booking\.com/i },
-  { label: 'Dining', emoji: '🍽', pattern: /restaurant|cafe|coffee|pizza|burger|sushi|grill|kitchen|starbucks|dunkin|mcdonald|chipotle|subway|doordash|food|dining|eatery|bistro|diner/i },
-  { label: 'Retail', emoji: '🛍', pattern: /amazon|walmart|target|costco|best buy|home depot|lowes|macy|nordstrom|gap|h&m|zara|old navy|shop|store|retail|fashion|clothing|apparel/i },
-  { label: 'Delivery', emoji: '📦', pattern: /instacart|gopuff|shipt|postmates|uber eats|grubhub|delivery/i },
-  { label: 'Tech', emoji: '💻', pattern: /netflix|spotify|hulu|disney\+|apple|google|microsoft|adobe|software|streaming|tech|digital|cloud/i },
-  { label: 'Gas', emoji: '⛽', pattern: /gas|fuel|shell|bp|exxon|chevron|mobil|sunoco|circle k|wawa/i },
-  { label: 'Health', emoji: '💊', pattern: /pharmacy|cvs|walgreens|rite aid|health|medical|dental|vision|gym|fitness|peloton/i },
+  {
+    label: 'Gas',
+    emoji: '⛽',
+    pattern: /gas pump|pay at the pump|cumberland farms|loaf.n.jug|quikstop|quiktrip|turkey hill|\bshell\b|\bexxon\b|\bchevron\b|\bmobil\b|sunoco|circle k|\bwawa\b/i,
+  },
+  {
+    label: 'Delivery',
+    emoji: '📦',
+    pattern: /instacart|gopuff|\bshipt\b|postmates|uber eats|grubhub/i,
+  },
+  {
+    label: 'Travel',
+    emoji: '✈',
+    pattern: /delta air lines|aer lingus|icelandair|qatar airways|virgin atlantic|singapore airlines|airbnb|alamo rent|avis car|budget car rental|cruise america|\bcunard\b|holland america|\bviator\b|\btrafalgar\b|vail resorts|sugarloaf|sunday river|alterra mountain|big sky resort|micato|\btumi\b|briggs.riley|shipskis|shipsticks|stoney clover lane|peak design|langham hotel|mandarin oriental|lotte hotel|lotte new york|terranea|wynn las vegas|green valley ranch casino|\braffles\b|\bfairmont\b|\bsofitel\b|carey international|golfbreaks|clear\+|ihg.*hotel|hilton resort|\bhertz\b|ski resort|lift ticket|\bturo\b|chauffeured|car rental|cruise ship|travelware|aka.*hotel|hotel.*residenc/i,
+  },
+  {
+    label: 'Dining',
+    emoji: '🍽',
+    pattern: /restaurant|steakhouse|gastropub|\bcafe\b|pizza\b|burger\b|\bgrill\b|\bbistro\b|\bdiner\b|starbucks|dunkin|chipotle|subway|doordash|jamba\b|jimmy john|little caesars|pizza hut|schlotzsky|mcalister|cicis\b|shake shack|smashburger|el pollo|outback steak|moe.s southwest|mountain mike|auntie anne|five crowns|docks oyster|eddie merlot|il fornaio|magnolia bakery|nowak.s|paul martin|red heat|sarabeth|sullivan.s steak|succotash\b|rosa mexicano|mi vida\b|puesto\b|wagamama\b|boqueria\b|chef geoff|uchi\b|uchiko\b|\bnaya\b|hellofresh|home chef|green chef|marley spoon|sunbasket|gobble\b|hungryroot|cook unity|daily harvest|freshdirect|factor\b|spoonful of comfort|wild alaskan|misfits market|natural grocers|food lion|fruit center|nurture life|little spoon|ghirardelli|bluebottle|peets\.com|coffee bean|shopjura|america.s test kitchen|milkstreet|sur la table|zwilling|caraway\b|shopflavcity|wine\b|winery|vineyards|spirits\b|brewery|beverage|tapas\b|seafood\b|bakery\b|eatery\b|meal kit|meal delivery|gourmet food|food delivery/i,
+  },
+  {
+    label: 'Beauty',
+    emoji: '💄',
+    pattern: /skincare|skin care|cosmetics?\b|fragrance\b|serum\b|moisturizer|sunscreen\b|haircare|hair care|aesop\b|biossance|c\.o\. bigelow|\bbigelow\b|colorescience|darphin|dior beauty|dollar shave|dennis gross|drunk elephant|glowbar\b|la prairie|manscaped|massage envy|musely\b|no7beauty|osea\b|peachy\b|r\+co\b|redken\b|shiseido|art of shaving|aroma360|credobeauty|davines\b|drsturm|dr sturm|elfcosmetics|elf cosmetics|eltamd\b|glowrecipe|glow recipe|grownalchemist|grown alchemist|murad\b|narscosmetics|nars cosmetics|obagi\b|olaplex\b|oribe\b|pcaskin|pca skin|philosophy\.com|proactiv\b|reviveskincare|revive skincare|skinbetter|solawave\b|tataharperskincare|tata harper|theouai\b|the ouai|ubeauty\b|u beauty\b|curology\b|drmtlgy|cl.{1,5}de peau|botox studio|facial\b|ancient baths|aire.*bath|salt.*stone|hum nutrition|formulations for skin/i,
+  },
+  {
+    label: 'Home',
+    emoji: '🏠',
+    pattern: /simplisafe|\barlo\b|american home shield|renuity\b|mattress\b|avocado.*mattress|cocoon.*sealy|sleep outfitters|mattress firm|cozy earth|cuddledown|linensandhutch|linens.*hutch|little sleepies|lovetodream|love to dream|\bikea\b|crate.*barrel|ballard designs|blu dot\b|floor.*decor\b|tilebar|rugs\.com|lampsplus|lamps plus|jonathan adler|simplehuman|\bwhisker\b|litter.robot|irobot\b|\bbissell\b|charbroil\b|county tv|yudin|happiestbaby|happiest baby|gardyn\b|\bpura\b|laundrysauce|laundry sauce|rocco.*fridge|bed bath|bedbath|nuna baby|bugaboo\b|miraclebrand|miracle brand|home security|home warranty|home improvement|home decor|appliance|bedding\b|pillow\b|blanket\b|furniture\b/i,
+  },
+  {
+    label: 'Events',
+    emoji: '🎭',
+    pattern: /ticket\b|venue\b|concert\b|broadway|theater\b|theatre\b|goldenvoice|gametime\b|megaseats|todaytix|telecharge|bowery presents|peacock theater|eventticketscenter|ticketsmarter|nba store|nbastore|nhl shop|\bwwe\b|fanatics\b|delta center team|disney\+|hulu\b|hbo\b|directv|fubo\b|paramount\+|starz\b|youtube tv|fanduel sports|cnbc pro|\bcnn\b|the motley fool|the atlantic\b|ancestry\b|\blids\b|jdsports|jd sports|live.*music|live.*sport|streaming.*tv|sports.*network/i,
+  },
+  {
+    label: 'Health',
+    emoji: '💊',
+    pattern: /pharmacy|\bcvs\b|walgreens|rite aid|betterhelp|hyperice|stretchlab|othership|oura\b|prenuvo|labcorp|glassesusa|lenscrafters|liquid i\.v|liquid iv\b|lineage provisions|vitamin shoppe|sports sciences|nativepath|native path|hylands\b|pureformulas|ritual.*vitamin|supplement\b|vitamin\b|fitness\b|wellness\b|medical\b|dental\b|vision care|health test|\bgym\b|yoga\b|pilates\b|physical therapy|chiropractic|nordictrack\b|tonal\b|bowflex\b|peloton|nobull\b/i,
+  },
+  {
+    label: 'Tech',
+    emoji: '💻',
+    pattern: /adobe\b|microsoft\b|lenovo\b|sony electronics|netgear\b|harman kardon|harmankardon|zagg\b|slack\.com|\bdocusign\b|dropbox\b|quickbooks|squarespace|xero\.com|replit\b|lastpass|grasshopper.*phone|audiogo|callrail|indeed\.com|udemy\b|ooma\b|optimum internet|at&t wireless|straight talk|total wireless|tracfone|visible\b|turbotax|taxact\b|hrblock|legalzoom|trust.*will|vistaprint|pimsleur|astound\b|magnifi\b|nrg protects|software\b|electronics\b|wireless plan|internet service|prepaid.*plan|phone.*plan/i,
+  },
+  {
+    label: 'Retail',
+    emoji: '🛍',
+    pattern: /clothing|apparel|fashion\b|footwear|outerwear|swimwear|eyewear|sunglasses|jewelry|jeweler|handbag|accessori|levi.s|lululemon|burberry|calvin klein|carhartt|cole haan|mizzen|mackage|stitch fix|rent the runway|\btheory\b|tory burch|toryburch|sandro paris|maje paris|\bmulberry\b|rebecca minkoff|allen edmonds|\bariat\b|tecovas|criquet|express\b|southern tide|\brails\b|paka apparel|on\.com|\bkuhl\b|faherty|rodd.*gunn|universalstandard|universal standard|splendid\b|maurices|lagence|frank.*eileen|robertgraham|robert graham|tnuck\b|saxx\b|staud\b|collars.*co|natori\b|harper wilde|vix swimwear|krewe\b|\brevo\b|oakley\b|freda salvador|bezel\b|brilliant earth|jennifer fisher|long.*jewel|manfredi jewel|happy jewel|ross.simons|swarovski|gorjana|pandora\b|vivrelle|kipling\b|ogio\b|radley london|vera bradley|mansur gavriel|rifle paper|printfresh|print fresh|crocs\b|fitflop|jins\b|steve madden|xero shoes|kickscrew|7forallmankind|aventon\b|sweetwater|musical instrument|golf club|nordstrom|michaels\b|sam.s club|barnesandnoble|barnes.*noble|aldoshoes|aldo shoes|\baldo\b|alexander wang|us polo|uspoloassn|intimissimi|heydude|hey dude|dridriss|thisisneeded|underwear\b/i,
+  },
 ]
 
 function getCategory(merchant: string): { label: string; emoji: string } {
@@ -125,7 +168,7 @@ const GRID = 'grid grid-cols-[minmax(160px,1fr)_80px_100px_90px_70px_110px_80px_
 function ColHeader({ children, align = 'left' }: { children: React.ReactNode; align?: 'left' | 'right' | 'center' }) {
   const a = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
   return (
-    <div className={`${a} text-[11px] font-medium uppercase tracking-[0.8px] text-gray-400 py-2.5 px-2`}>
+    <div className={`${a} text-[11px] font-medium uppercase tracking-[0.8px] text-gray-400 py-2.5 px-2 whitespace-nowrap`}>
       {children}
     </div>
   )
