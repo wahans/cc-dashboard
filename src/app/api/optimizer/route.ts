@@ -15,6 +15,12 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const ranked = getCardResults(category, cards ?? [])
+  // Strip inactive categories (e.g. Discover rotating promos not currently running)
+  const active = (cards ?? []).map((card) => ({
+    ...card,
+    card_categories: card.card_categories.filter((cc: { active: boolean }) => cc.active !== false),
+  }))
+
+  const ranked = getCardResults(category, active)
   return NextResponse.json(ranked)
 }
