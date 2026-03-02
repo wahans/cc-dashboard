@@ -91,7 +91,10 @@ function formatReward(offer: Offer): { text: string; isPoints: boolean } {
     return { text: offer.reward_amount_cents.toLocaleString() + ' pts', isPoints: true }
   }
   const dollars = offer.reward_amount_cents / 100
-  return { text: `$${dollars % 1 === 0 ? dollars.toFixed(0) : dollars.toFixed(2)} back`, isPoints: false }
+  const formatted = dollars % 1 === 0
+    ? dollars.toLocaleString('en-US')
+    : dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return { text: `$${formatted} back`, isPoints: false }
 }
 
 function formatMinSpend(cents: number | null): string {
