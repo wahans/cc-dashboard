@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 // NextRequest used only for GET (cron auth)
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 import { getAmexTransactions } from '@/lib/budget-db'
 import { computeOfferSpend, matchBenefitsToTransactions } from '@/lib/transaction-matcher'
 import type { ResetPeriod } from '@/lib/benefits'
@@ -26,57 +26,55 @@ async function handleSync() {
   }
 
   try {
-    const supabase = createServiceClient()
     const syncedAt = new Date().toISOString()
 
     // 1. Fetch all Amex transactions from the budget dashboard DB
     const transactions = await getAmexTransactions()
 
     // 2. Load enrolled offers (threshold not yet met)
-    const { data: enrolledRows } = await supabase
-      .from('enrolled_offers')
-      .select('id, offer_id, enrolled_at, spent_amount_cents, amex_offers(merchant, spend_min_cents)')
-      .eq('threshold_met', false)
+    const enrolledRows = await sql`
+      select e.id, e.offer_id, e.enrolled_at, e.spent_amount_cents,
+             o.merchant, o.spend_min_cents
+      from enrolled_offers e join amex_offers o on o.id = e.offer_id
+      where e.threshold_met = false
+    `
 
     // 3. Compute and update offer spend
     let offersUpdated = 0
     let offersCompleted = 0
 
-    for (const row of enrolledRows ?? []) {
-      const offer = Array.isArray(row.amex_offers) ? row.amex_offers[0] : row.amex_offers
-      if (!offer || !row.enrolled_at) continue
+    for (const row of enrolledRows) {
+      if (!row.merchant || !row.enrolled_at) continue
 
       const spentCents = computeOfferSpend(
-        (offer as { merchant: string }).merchant,
+        row.merchant as string,
         row.enrolled_at as string,
         transactions
       )
-      const minCents = (offer as { spend_min_cents: number | null }).spend_min_cents
+      const minCents = row.spend_min_cents as number | null
       const thresholdMet = minCents != null && spentCents >= minCents
 
-      await supabase
-        .from('enrolled_offers')
-        .update({
-          spent_amount_cents: spentCents,
-          threshold_met: thresholdMet,
-          ...(thresholdMet ? { completed_at: syncedAt } : {}),
-        })
-        .eq('id', row.id)
+      await sql`
+        update enrolled_offers
+        set spent_amount_cents = ${spentCents},
+            threshold_met = ${thresholdMet},
+            completed_at = ${thresholdMet ? syncedAt : null}
+        where id = ${row.id}
+      `
 
       offersUpdated++
       if (thresholdMet) offersCompleted++
     }
 
     // 4. Load active enrolled benefits
-    const { data: benefits } = await supabase
-      .from('amex_benefits')
-      .select('id, name, amount_cents, reset_period')
-      .eq('active', true)
-      .eq('enrolled', true)
+    const benefits = await sql`
+      select id, name, amount_cents, reset_period
+      from amex_benefits where active = true and enrolled = true
+    `
 
     // 5. Compute benefit usage from transactions
     const benefitMatches = matchBenefitsToTransactions(
-      (benefits ?? []).map((b) => ({
+      benefits.map((b) => ({
         id: b.id as string,
         name: b.name as string,
         amount_cents: b.amount_cents as number,
@@ -88,30 +86,23 @@ async function handleSync() {
     // 6. Delete old budget_sync records and reinsert
     let benefitsSynced = 0
     for (const match of benefitMatches) {
-      await supabase
-        .from('benefit_usage')
-        .delete()
-        .eq('benefit_id', match.benefit_id)
-        .eq('period_key', match.period_key)
-        .eq('source', 'budget_sync')
-
-      const { error } = await supabase.from('benefit_usage').insert({
-        benefit_id: match.benefit_id,
-        amount_used_cents: match.amount_used_cents,
-        period_key: match.period_key,
-        notes: 'Auto-synced from budget dashboard',
-        source: 'budget_sync',
-      })
-
-      if (!error) benefitsSynced++
+      await sql`
+        delete from benefit_usage
+        where benefit_id = ${match.benefit_id} and period_key = ${match.period_key}
+          and source = 'budget_sync'
+      `
+      await sql`
+        insert into benefit_usage (benefit_id, amount_used_cents, period_key, notes, source)
+        values (${match.benefit_id}, ${match.amount_used_cents}, ${match.period_key},
+                'Auto-synced from budget dashboard', 'budget_sync')
+      `
+      benefitsSynced++
     }
 
-    await supabase.from('sync_log').insert({
-      type: 'budget_sync',
-      records_processed: transactions.length,
-      records_updated: offersUpdated + benefitsSynced,
-      error: null,
-    })
+    await sql`
+      insert into sync_log (type, records_processed, records_updated, error)
+      values ('budget_sync', ${transactions.length}, ${offersUpdated + benefitsSynced}, null)
+    `
 
     return NextResponse.json({
       transactions_processed: transactions.length,
@@ -122,12 +113,10 @@ async function handleSync() {
     })
   } catch (err) {
     try {
-      const supabase = createServiceClient()
-      await supabase.from('sync_log').insert({
-        type: 'budget_sync',
-        records_processed: 0,
-        error: String(err),
-      })
+      await sql`
+        insert into sync_log (type, records_processed, error)
+        values ('budget_sync', 0, ${String(err)})
+      `
     } catch { /* ignore */ }
     console.error('[budget-sync] error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

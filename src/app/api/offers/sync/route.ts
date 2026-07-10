@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 import { scrapeFrequentMilerOffers } from '@/lib/scraper'
+import { persistOffers } from '@/lib/offer-store'
 
 // Vercel cron sends GET requests; also support POST for manual triggers
 export async function GET(req: NextRequest) {
@@ -19,55 +20,16 @@ async function handleSync(req: NextRequest) {
 
   try {
     const offers = await scrapeFrequentMilerOffers()
-    const supabase = createServiceClient()
-
     if (offers.length === 0) {
-      await supabase.from('sync_log').insert({
-        type: 'offers_scrape',
-        records_processed: 0,
-        error: 'No offers scraped',
-      })
+      await sql`insert into sync_log (type, records_processed, error) values ('offers_scrape', 0, 'No offers scraped')`
       return NextResponse.json(
         { synced: 0, message: 'No offers scraped', timestamp: new Date().toISOString() },
         { status: 200 }
       )
     }
 
-    const { error: upsertError } = await supabase.from('amex_offers').upsert(
-      offers.map((o) => ({
-        ...o,
-        active: true,
-        scraped_at: new Date().toISOString(),
-      })),
-      {
-        onConflict: 'merchant,expiration_date,reward_amount_cents',
-        ignoreDuplicates: false,
-      }
-    )
-
-    if (upsertError) {
-      try {
-        await supabase.from('sync_log').insert({
-          type: 'offers_scrape',
-          records_processed: offers.length,
-          error: upsertError.message,
-        })
-      } catch { /* ignore */ }
-      return NextResponse.json({ error: upsertError.message }, { status: 500 })
-    }
-
-    // Mark offers past their expiration date as inactive
-    const today = new Date().toISOString().split('T')[0]
-    await supabase
-      .from('amex_offers')
-      .update({ active: false })
-      .lt('expiration_date', today)
-
-    await supabase.from('sync_log').insert({
-      type: 'offers_scrape',
-      records_processed: offers.length,
-      error: null,
-    })
+    await persistOffers(offers)
+    await sql`insert into sync_log (type, records_processed, error) values ('offers_scrape', ${offers.length}, null)`
 
     return NextResponse.json({
       synced: offers.length,
@@ -76,12 +38,7 @@ async function handleSync(req: NextRequest) {
   } catch (err) {
     console.error('[sync] error:', err)
     try {
-      const supabase = createServiceClient()
-      await supabase.from('sync_log').insert({
-        type: 'offers_scrape',
-        records_processed: 0,
-        error: String(err),
-      })
+      await sql`insert into sync_log (type, records_processed, error) values ('offers_scrape', 0, ${String(err)})`
     } catch { /* ignore log failure */ }
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

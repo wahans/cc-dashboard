@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 import { getPeriodKey, getPeriodEnd } from '@/lib/benefits'
 import type { ResetPeriod } from '@/lib/benefits'
 import { StatCard } from '@/components/dashboard/StatCard'
@@ -19,105 +19,72 @@ function formatDollars(cents: number): string {
 }
 
 export default async function DashboardPage() {
-  const supabase = createServiceClient()
   const now = new Date()
   const today = now.toISOString().split('T')[0]
   const in14 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const currentYear = now.getUTCFullYear().toString()
 
-  const { count: enrolledOffersCount } = await supabase
-    .from('enrolled_offers')
-    .select('id', { count: 'exact', head: true })
-
-  const { data: enrolledRows } = await supabase
-    .from('enrolled_offers')
-    .select('offer_id')
+  const [{ count: enrolledOffersCount }] = await sql`select count(*)::int as count from enrolled_offers`
+  const enrolledRows = await sql`select offer_id from enrolled_offers`
 
   const enrolledIds = (enrolledRows ?? []).map((r) => r.offer_id as string)
   const enrolledSet = new Set(enrolledIds)
 
-  const { data: rawExpiring } = await supabase
-    .from('amex_offers')
-    .select('id, merchant, reward_amount_cents, spend_min_cents, expiration_date, reward_type')
-    .eq('active', true)
-    .gte('expiration_date', today)
-    .lte('expiration_date', in14)
-    .order('reward_amount_cents', { ascending: false })
-    .limit(20)
+  const rawExpiring = await sql`
+    select id, merchant, reward_amount_cents, spend_min_cents, expiration_date, reward_type
+    from amex_offers
+    where active = true and expiration_date >= ${today} and expiration_date <= ${in14}
+    order by reward_amount_cents desc limit 20
+  `
 
-  const expiringOffers = (rawExpiring ?? [])
+  const expiringOffers = rawExpiring
     .filter((o) => !enrolledSet.has(o.id))
-    .slice(0, 10)
+    .slice(0, 10) as unknown as Parameters<typeof ExpiringOffersPanel>[0]['unenrolledOffers']
 
-  let unenrolledExpiringCount = 0
-  if (enrolledIds.length === 0) {
-    const { count } = await supabase
-      .from('amex_offers')
-      .select('id', { count: 'exact', head: true })
-      .eq('active', true)
-      .gte('expiration_date', today)
-      .lte('expiration_date', in14)
-    unenrolledExpiringCount = count ?? 0
-  } else {
-    const { count } = await supabase
-      .from('amex_offers')
-      .select('id', { count: 'exact', head: true })
-      .eq('active', true)
-      .gte('expiration_date', today)
-      .lte('expiration_date', in14)
-      .not('id', 'in', `(${enrolledIds.join(',')})`)
-    unenrolledExpiringCount = count ?? 0
-  }
+  const allExpiring = await sql`
+    select id from amex_offers
+    where active = true and expiration_date >= ${today} and expiration_date <= ${in14}
+  `
+  const unenrolledExpiringCount = allExpiring.filter((o) => !enrolledSet.has(o.id)).length
 
-  const { data: rawEnrolledExpiring } = await supabase
-    .from('enrolled_offers')
-    .select('id, spent_amount_cents, amex_offers!inner(merchant, reward_amount_cents, spend_min_cents, expiration_date, reward_type)')
-    .eq('threshold_met', false)
-    .gte('amex_offers.expiration_date', today)
-    .lte('amex_offers.expiration_date', in30)
-    .order('amex_offers.expiration_date', { ascending: true })
+  const rawEnrolledExpiring = await sql`
+    select e.id, e.spent_amount_cents, o.merchant, o.reward_amount_cents,
+           o.spend_min_cents, o.expiration_date, o.reward_type
+    from enrolled_offers e
+    join amex_offers o on o.id = e.offer_id
+    where e.threshold_met = false and o.expiration_date >= ${today} and o.expiration_date <= ${in30}
+    order by o.expiration_date asc
+  `
 
-  const enrolledExpiringOffers = (rawEnrolledExpiring ?? []).map((row) => {
-    const o = Array.isArray(row.amex_offers) ? row.amex_offers[0] : row.amex_offers
-    return {
+  const enrolledExpiringOffers = rawEnrolledExpiring.map((row) => ({
       id: row.id as string,
       spent_amount_cents: (row.spent_amount_cents as number | null) ?? 0,
-      merchant: (o as { merchant: string }).merchant,
-      reward_amount_cents: (o as { reward_amount_cents: number | null }).reward_amount_cents,
-      spend_min_cents: (o as { spend_min_cents: number | null }).spend_min_cents,
-      expiration_date: (o as { expiration_date: string }).expiration_date,
-      reward_type: (o as { reward_type: string }).reward_type,
-    }
-  })
+      merchant: row.merchant as string,
+      reward_amount_cents: row.reward_amount_cents as number | null,
+      spend_min_cents: row.spend_min_cents as number | null,
+      expiration_date: row.expiration_date as string,
+      reward_type: row.reward_type as string,
+    }))
 
   const enrolledPendingIn14d = enrolledExpiringOffers.filter(
     (o) => o.expiration_date && o.expiration_date <= in14
   ).length
 
-  const { data: benefits } = await supabase
-    .from('amex_benefits')
-    .select('*, benefit_usage(*)')
-    .eq('active', true)
-    .eq('enrolled', true)
-    .order('sort_order')
+  const benefits = await sql`select * from amex_benefits where active = true and enrolled = true order by sort_order`
+  const usage = await sql`select * from benefit_usage`
 
-  const benefitsSummary = (benefits ?? []).map((b) => {
+  const benefitsSummary = benefits.map((b) => {
     const period = b.reset_period as ResetPeriod
     const periodKey = getPeriodKey(period, now)
     const periodEnd = getPeriodEnd(period, now)
-    const periodUsage = (b.benefit_usage ?? []).filter(
-      (u: { period_key: string }) => u.period_key === periodKey
-    )
-    const usedCents = periodUsage.reduce(
-      (sum: number, u: { amount_used_cents: number }) => sum + u.amount_used_cents,
-      0
-    )
+    const periodUsage = usage.filter((u) => u.benefit_id === b.id && u.period_key === periodKey)
+    const usedCents = periodUsage.reduce((sum, u) => sum + Number(u.amount_used_cents), 0)
     const remainingCents = Math.max(0, b.amount_cents - usedCents)
     return {
       id: b.id as string,
       name: b.name as string,
-      amount_cents: b.amount_cents as number,
+      amount_cents: Number(b.amount_cents),
       used_cents: usedCents,
       remaining_cents: remainingCents,
       reset_period: period,
@@ -130,30 +97,23 @@ export default async function DashboardPage() {
 
   const benefitsRemainingCents = benefitsSummary.reduce((sum, b) => sum + b.remaining_cents, 0)
 
-  const { data: ytdUsage } = await supabase
-    .from('benefit_usage')
-    .select('amount_used_cents')
-    .like('period_key', `${currentYear}%`)
+  const ytdUsage = await sql`select amount_used_cents from benefit_usage where period_key like ${currentYear + '%'} `
 
   const benefitYTDCents = (ytdUsage ?? []).reduce(
-    (sum, u) => sum + (u.amount_used_cents as number), 0
+    (sum, u) => sum + Number(u.amount_used_cents), 0
   )
 
-  const { data: lastSyncRow } = await supabase
-    .from('benefit_usage')
-    .select('created_at')
-    .eq('source', 'budget_sync')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const [lastSyncRow] = await sql`
+    select created_at from benefit_usage where source = 'budget_sync'
+    order by created_at desc limit 1
+  `
 
   const lastBudgetSync = lastSyncRow?.created_at ?? null
 
-  const { data: syncLogRows } = await supabase
-    .from('sync_log')
-    .select('id, type, ran_at, records_processed, records_updated, error')
-    .order('ran_at', { ascending: false })
-    .limit(20)
+  const syncLogRows = await sql`
+    select id, type, ran_at, records_processed, records_updated, error
+    from sync_log order by ran_at desc limit 20
+  `
 
   return (
     <div className="max-w-[1100px] mx-auto px-6 py-6 space-y-6">

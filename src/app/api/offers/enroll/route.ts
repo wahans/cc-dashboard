@@ -1,29 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
   const { offer_id } = await req.json()
   if (!offer_id) return NextResponse.json({ error: 'offer_id required' }, { status: 400 })
 
-  const supabase = createServiceClient()
-
-  const { data: existing } = await supabase
-    .from('enrolled_offers')
-    .select('id')
-    .eq('offer_id', offer_id)
-    .maybeSingle()
+  const [existing] = await sql`select id from enrolled_offers where offer_id = ${offer_id} limit 1`
 
   if (existing) {
-    await supabase.from('enrolled_offers').delete().eq('id', existing.id)
+    await sql`delete from enrolled_offers where id = ${existing.id}`
     return NextResponse.json({ enrolled: false })
   }
 
-  const { data, error } = await supabase
-    .from('enrolled_offers')
-    .insert({ offer_id })
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const [data] = await sql`insert into enrolled_offers (offer_id) values (${offer_id}) returning *`
   return NextResponse.json({ enrolled: true, enrollment: data })
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 import { parseAmexCSV, matchToBenefit, parseAmexDate } from '@/lib/csv-parser'
 import { getPeriodKey } from '@/lib/benefits'
 
@@ -10,8 +10,7 @@ export async function POST(req: NextRequest) {
   const transactions = parseAmexCSV(csv)
   const credits = transactions.filter((t) => t.is_credit)
 
-  const supabase = createServiceClient()
-  const { data: benefits } = await supabase.from('amex_benefits').select('id, name, reset_period')
+  const benefits = await sql`select id, name, reset_period from amex_benefits`
 
   const matches: { benefit_name: string; amount: number; date: string }[] = []
   const inserts: { benefit_id: string; amount_used_cents: number; period_key: string; notes: string; source: string }[] = []
@@ -35,9 +34,11 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  if (inserts.length > 0) {
-    const { error } = await supabase.from('benefit_usage').insert(inserts)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  for (const insert of inserts) {
+    await sql`
+      insert into benefit_usage (benefit_id, amount_used_cents, period_key, notes, source)
+      values (${insert.benefit_id}, ${insert.amount_used_cents}, ${insert.period_key}, ${insert.notes}, ${insert.source})
+    `
   }
 
   return NextResponse.json({ imported: matches.length, matches })

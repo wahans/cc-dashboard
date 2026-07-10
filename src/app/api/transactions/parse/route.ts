@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 import { parseAmexCSV, matchToBenefit, matchToOffers, parseAmexDate, OfferMatchResult } from '@/lib/csv-parser'
 import { getPeriodKey, ResetPeriod } from '@/lib/benefits'
 
@@ -19,21 +19,15 @@ export async function POST(req: NextRequest) {
   if (!csv) return NextResponse.json({ error: 'csv required' }, { status: 400 })
 
   const transactions = parseAmexCSV(csv)
-  const supabase = createServiceClient()
-
   // ── Benefits matching ──────────────────────────────────────────────
-  const { data: benefits, error: benefitsError } = await supabase
-    .from('amex_benefits')
-    .select('id, name, reset_period')
-    .eq('active', true)
-  if (benefitsError) return NextResponse.json({ error: benefitsError.message }, { status: 500 })
+  const benefits = await sql`select id, name, reset_period from amex_benefits where active = true`
 
   const benefitMatches: BenefitMatchResult[] = []
 
   for (const txn of transactions.filter((t) => t.is_credit)) {
     const benefitName = matchToBenefit(txn.description, txn.amount)
     if (!benefitName) continue
-    const benefit = benefits?.find((b) => b.name === benefitName)
+    const benefit = benefits.find((b) => b.name === benefitName)
     if (!benefit) continue
 
     const txnDate = parseAmexDate(txn.date)
@@ -42,13 +36,11 @@ export async function POST(req: NextRequest) {
     const amount_cents = Math.round(txn.amount * 100)
 
     // Dedup: check if this exact usage record already exists
-    const { data: existing } = await supabase
-      .from('benefit_usage')
-      .select('id')
-      .eq('benefit_id', benefit.id)
-      .eq('period_key', periodKey)
-      .eq('notes', notes)
-      .maybeSingle()
+    const [existing] = await sql`
+      select id from benefit_usage
+      where benefit_id = ${benefit.id} and period_key = ${periodKey} and notes = ${notes}
+      limit 1
+    `
 
     benefitMatches.push({
       benefit_id: benefit.id,
@@ -62,17 +54,17 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Offers matching ───────────────────────────────────────────────
-  const { data: enrolledOffers, error: offersError } = await supabase
-    .from('enrolled_offers')
-    .select('id, offer_id, amex_offers(merchant, spend_min_cents)')
-    .eq('threshold_met', false)
-  if (offersError) return NextResponse.json({ error: offersError.message }, { status: 500 })
+  const enrolledOffers = await sql`
+    select e.id, e.offer_id, o.merchant, o.spend_min_cents
+    from enrolled_offers e join amex_offers o on o.id = e.offer_id
+    where e.threshold_met = false
+  `
 
-  const offerInputs = (enrolledOffers ?? []).map((e) => ({
+  const offerInputs = enrolledOffers.map((e) => ({
     enrollment_id: e.id as string,
     offer_id: e.offer_id as string,
-    merchant: (e.amex_offers as unknown as { merchant: string; spend_min_cents: number | null } | null)?.merchant ?? '',
-    spend_min_cents: (e.amex_offers as unknown as { merchant: string; spend_min_cents: number | null } | null)?.spend_min_cents ?? null,
+    merchant: e.merchant ?? '',
+    spend_min_cents: e.spend_min_cents ?? null,
   }))
 
   const offerMatches: OfferMatchResult[] = matchToOffers(transactions, offerInputs)

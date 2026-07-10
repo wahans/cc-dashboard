@@ -1,160 +1,69 @@
 import { NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 import { getPeriodKey, getPeriodEnd } from '@/lib/benefits'
 import type { ResetPeriod } from '@/lib/benefits'
 
 export async function GET() {
-  const supabase = createServiceClient()
   const now = new Date()
   const today = now.toISOString().split('T')[0]
   const in14 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const currentYear = now.getUTCFullYear().toString()
 
-  // 1. Count enrolled offers
-  const { count: enrolledOffersCount } = await supabase
-    .from('enrolled_offers')
-    .select('id', { count: 'exact', head: true })
-
-  // 2. Get enrolled offer IDs (to exclude from expiring panel)
-  const { data: enrolledRows, error: enrolledError } = await supabase
-    .from('enrolled_offers')
-    .select('offer_id')
-  if (enrolledError) return NextResponse.json({ error: enrolledError.message }, { status: 500 })
-
-  const enrolledIds = (enrolledRows ?? []).map((r) => r.offer_id as string)
-
-  // 3. Get top 20 unenrolled offers expiring within 14 days (fetch extra, filter enrolled client-side)
-  const { data: rawExpiring } = await supabase
-    .from('amex_offers')
-    .select('id, merchant, reward_amount_cents, spend_min_cents, expiration_date, reward_type')
-    .eq('active', true)
-    .gte('expiration_date', today)
-    .lte('expiration_date', in14)
-    .order('reward_amount_cents', { ascending: false })
-    .limit(20)
-
-  // Filter out already-enrolled
+  const [{ count: enrolledOffersCount }] = await sql`select count(*)::int as count from enrolled_offers`
+  const enrolledRows = await sql`select offer_id from enrolled_offers`
+  const enrolledIds = enrolledRows.map((row) => row.offer_id)
   const enrolledSet = new Set(enrolledIds)
-  const expiringOffers = (rawExpiring ?? [])
-    .filter((o) => !enrolledSet.has(o.id))
-    .slice(0, 10)
 
-  // 4. Count unenrolled offers expiring within 14 days (for stat card)
-  let unenrolledExpiringCount = 0
-  if (enrolledIds.length === 0) {
-    const { count, error: expiringCountError } = await supabase
-      .from('amex_offers')
-      .select('id', { count: 'exact', head: true })
-      .eq('active', true)
-      .gte('expiration_date', today)
-      .lte('expiration_date', in14)
-    if (expiringCountError) return NextResponse.json({ error: expiringCountError.message }, { status: 500 })
-    unenrolledExpiringCount = count ?? 0
-  } else {
-    const { count } = await supabase
-      .from('amex_offers')
-      .select('id', { count: 'exact', head: true })
-      .eq('active', true)
-      .gte('expiration_date', today)
-      .lte('expiration_date', in14)
-      .not('id', 'in', `(${enrolledIds.join(',')})`)
-    unenrolledExpiringCount = count ?? 0
-  }
+  const rawExpiring = await sql`
+    select id, merchant, reward_amount_cents, spend_min_cents, expiration_date, reward_type
+    from amex_offers
+    where active = true and expiration_date >= ${today} and expiration_date <= ${in14}
+    order by reward_amount_cents desc limit 20
+  `
+  const expiringOffers = rawExpiring.filter((offer) => !enrolledSet.has(offer.id)).slice(0, 10)
+  const allExpiring = await sql`
+    select id from amex_offers
+    where active = true and expiration_date >= ${today} and expiration_date <= ${in14}
+  `
 
-  // 4b. Get enrolled offers expiring within 30 days (incomplete only)
-  const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const enrolledExpiringOffers = await sql`
+    select e.id, o.merchant, o.reward_amount_cents, o.spend_min_cents, o.expiration_date, o.reward_type
+    from enrolled_offers e join amex_offers o on o.id = e.offer_id
+    where e.threshold_met = false and o.expiration_date >= ${today} and o.expiration_date <= ${in30}
+    order by o.expiration_date asc
+  `
 
-  const { data: rawEnrolledExpiring } = await supabase
-    .from('enrolled_offers')
-    .select('id, amex_offers!inner(merchant, reward_amount_cents, spend_min_cents, expiration_date, reward_type)')
-    .eq('threshold_met', false)
-    .gte('amex_offers.expiration_date', today)
-    .lte('amex_offers.expiration_date', in30)
-    .order('amex_offers.expiration_date', { ascending: true })
-
-  const enrolledExpiringOffers = (rawEnrolledExpiring ?? []).map((row) => {
-    const o = Array.isArray(row.amex_offers) ? row.amex_offers[0] : row.amex_offers
-    return {
-      id: row.id as string,
-      merchant: (o as { merchant: string }).merchant,
-      reward_amount_cents: (o as { reward_amount_cents: number | null }).reward_amount_cents,
-      spend_min_cents: (o as { spend_min_cents: number | null }).spend_min_cents,
-      expiration_date: (o as { expiration_date: string }).expiration_date,
-      reward_type: (o as { reward_type: string }).reward_type,
-    }
-  })
-
-  // 5. Get enrolled benefits with usage
-  const { data: benefits, error: benefitsError } = await supabase
-    .from('amex_benefits')
-    .select('*, benefit_usage(*)')
-    .eq('active', true)
-    .eq('enrolled', true)
-    .order('sort_order')
-  if (benefitsError) return NextResponse.json({ error: benefitsError.message }, { status: 500 })
-
-  // 6. Compute per-benefit stats
-  const benefitsSummary = (benefits ?? []).map((b) => {
-    const period = b.reset_period as ResetPeriod
+  const benefits = await sql`select * from amex_benefits where active = true and enrolled = true order by sort_order`
+  const usage = await sql`select * from benefit_usage`
+  const benefitsSummary = benefits.map((benefit) => {
+    const period = benefit.reset_period as ResetPeriod
     const periodKey = getPeriodKey(period, now)
-    const periodEnd = getPeriodEnd(period, now)
-    const periodUsage = (b.benefit_usage ?? []).filter(
-      (u: { period_key: string }) => u.period_key === periodKey
-    )
-    const usedCents = periodUsage.reduce(
-      (sum: number, u: { amount_used_cents: number }) => sum + u.amount_used_cents,
-      0
-    )
-    const remainingCents = Math.max(0, b.amount_cents - usedCents)
+    const usedCents = usage
+      .filter((item) => item.benefit_id === benefit.id && item.period_key === periodKey)
+      .reduce((sum, item) => sum + Number(item.amount_used_cents), 0)
     return {
-      id: b.id as string,
-      name: b.name as string,
-      amount_cents: b.amount_cents as number,
+      id: benefit.id,
+      name: benefit.name,
+      amount_cents: Number(benefit.amount_cents),
       used_cents: usedCents,
-      remaining_cents: remainingCents,
+      remaining_cents: Math.max(0, Number(benefit.amount_cents) - usedCents),
       reset_period: period,
-      period_ends: periodEnd.toISOString().split('T')[0],
-      category: b.category as string,
+      period_ends: getPeriodEnd(period, now).toISOString().split('T')[0],
+      category: benefit.category,
     }
   })
 
-  benefitsSummary.sort((a, b) => b.remaining_cents - a.remaining_cents)
-
-  // 7. Total benefits remaining this period
-  const benefitsRemainingCents = benefitsSummary.reduce((sum, b) => sum + b.remaining_cents, 0)
-
-  // 8. Value captured YTD: benefit usage this year + completed enrolled offers
-  // YTD benefit usage: all usage this year regardless of current enrollment state
-  // (captures value even from benefits later unenrolled)
-  const { data: ytdUsage, error: ytdUsageError } = await supabase
-    .from('benefit_usage')
-    .select('amount_used_cents')
-    .like('period_key', `${currentYear}%`)
-  if (ytdUsageError) return NextResponse.json({ error: ytdUsageError.message }, { status: 500 })
-
-  const benefitYTDCents = (ytdUsage ?? []).reduce(
-    (sum, u) => sum + (u.amount_used_cents as number), 0
-  )
-
-  const { data: completedOffers } = await supabase
-    .from('enrolled_offers')
-    .select('amex_offers(reward_amount_cents)')
-    .eq('threshold_met', true)
-
-  const offersYTDCents = (completedOffers ?? []).reduce((sum, row) => {
-    const raw = row.amex_offers
-    const o = Array.isArray(raw) ? raw[0] : raw
-    return sum + ((o as { reward_amount_cents?: number } | null)?.reward_amount_cents ?? 0)
-  }, 0)
-
-  const valueCapturedYTDCents = benefitYTDCents + offersYTDCents
+  const benefitYTDCents = usage
+    .filter((item) => String(item.period_key).startsWith(currentYear))
+    .reduce((sum, item) => sum + Number(item.amount_used_cents), 0)
 
   return NextResponse.json({
     stats: {
       enrolledOffersCount: enrolledOffersCount ?? 0,
-      expiringOffersCount: unenrolledExpiringCount,
-      benefitsRemainingCents,
-      valueCapturedYTDCents,
+      expiringOffersCount: allExpiring.filter((offer) => !enrolledSet.has(offer.id)).length,
+      benefitsRemainingCents: benefitsSummary.reduce((sum, benefit) => sum + benefit.remaining_cents, 0),
+      valueCapturedYTDCents: benefitYTDCents,
     },
     expiringOffers,
     enrolledExpiringOffers,

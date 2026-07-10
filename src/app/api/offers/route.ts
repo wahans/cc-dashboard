@@ -1,36 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 
 const PAGE_SIZE = 1000
 
 export async function GET(req: NextRequest) {
   const enrolledOnly = req.nextUrl.searchParams.get('enrolled') === 'true'
-  const supabase = createServiceClient()
-
-  // Supabase caps responses at 1000 rows — paginate to fetch all
-  const allData: Record<string, unknown>[] = []
-  let start = 0
-
-  while (true) {
-    const { data, error } = await supabase
-      .from('amex_offers')
-      .select('*, enrolled_offers(*)')
-      .eq('active', true)
-      .order('reward_amount_cents', { ascending: false })
-      .range(start, start + PAGE_SIZE - 1)
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-    allData.push(...(data ?? []))
-    if ((data ?? []).length < PAGE_SIZE) break
-    start += PAGE_SIZE
-  }
+  const allData = await sql`
+    select o.*, e.id as enrollment_id, e.enrolled_at, e.spent_amount_cents,
+           e.threshold_met, e.completed_at
+    from amex_offers o
+    left join enrolled_offers e on e.offer_id = o.id
+    where o.active = true
+    order by o.reward_amount_cents desc
+  `
 
   const offers = allData.map((o) => ({
     ...o,
-    is_enrolled: ((o.enrolled_offers as unknown[]) ?? []).length > 0,
-    enrollment: ((o.enrolled_offers as unknown[]) ?? [])[0] ?? null,
-    enrolled_offers: undefined,
+    is_enrolled: Boolean(o.enrollment_id),
+    enrollment: o.enrollment_id ? {
+      id: o.enrollment_id,
+      enrolled_at: o.enrolled_at,
+      spent_amount_cents: o.spent_amount_cents,
+      threshold_met: o.threshold_met,
+      completed_at: o.completed_at,
+    } : null,
   }))
 
   const result = enrolledOnly ? offers.filter((o) => o.is_enrolled) : offers

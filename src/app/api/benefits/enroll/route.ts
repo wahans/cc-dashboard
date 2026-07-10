@@ -1,28 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { sql } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
   const { benefit_id } = await req.json()
   if (!benefit_id) return NextResponse.json({ error: 'benefit_id required' }, { status: 400 })
 
-  const supabase = createServiceClient()
+  const [current] = await sql`select enrolled from amex_benefits where id = ${benefit_id}`
 
-  const { data: current, error: fetchError } = await supabase
-    .from('amex_benefits')
-    .select('enrolled')
-    .eq('id', benefit_id)
-    .single()
-
-  if (fetchError || !current) {
+  if (!current) {
     return NextResponse.json({ error: 'Benefit not found' }, { status: 404 })
   }
 
-  const { error } = await supabase
-    .from('amex_benefits')
-    .update({ enrolled: !current.enrolled })
-    .eq('id', benefit_id)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  await sql`update amex_benefits set enrolled = ${!current.enrolled} where id = ${benefit_id}`
 
   return NextResponse.json({ enrolled: !current.enrolled })
 }
