@@ -14,8 +14,13 @@ export async function GET(req: NextRequest) {
   return handleSync()
 }
 
-// Manual trigger from dashboard UI — no token needed (API routes bypass site auth middleware)
-export async function POST() {
+// Manual trigger from dashboard UI. API routes bypass site auth middleware, so
+// validate the same cookie here before allowing a database reconciliation.
+export async function POST(req: NextRequest) {
+  const sitePassword = process.env.SITE_PASSWORD
+  if (sitePassword && req.cookies.get('site-auth')?.value !== sitePassword) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   return handleSync()
 }
 
@@ -27,6 +32,7 @@ async function handleSync() {
 
   try {
     const syncedAt = new Date().toISOString()
+    const syncYear = new Date(syncedAt).getUTCFullYear()
 
     // 1. Fetch all Amex transactions from the budget dashboard DB
     const transactions = await getAmexTransactions()
@@ -66,10 +72,11 @@ async function handleSync() {
       if (thresholdMet) offersCompleted++
     }
 
-    // 4. Load active enrolled benefits
+    // 4. Load all active benefits. Credits remain captured value even when a
+    // benefit is not currently marked as enrolled in the UI.
     const benefits = await sql`
       select id, name, amount_cents, reset_period
-      from amex_benefits where active = true and enrolled = true
+      from amex_benefits where active = true
     `
 
     // 5. Compute benefit usage from transactions
@@ -80,24 +87,34 @@ async function handleSync() {
         amount_cents: b.amount_cents as number,
         reset_period: b.reset_period as ResetPeriod,
       })),
-      transactions
+      transactions,
+      syncYear
     )
 
-    // 6. Delete old budget_sync records and reinsert
+    // 6. Rebuild auto-synced records for the year. Manual records are retained.
+    await sql`
+      delete from benefit_usage
+      where source = 'budget_sync' and period_key like ${`${syncYear}%`}
+    `
+
     let benefitsSynced = 0
     for (const match of benefitMatches) {
       await sql`
-        delete from benefit_usage
-        where benefit_id = ${match.benefit_id} and period_key = ${match.period_key}
-          and source = 'budget_sync'
-      `
-      await sql`
         insert into benefit_usage (benefit_id, amount_used_cents, period_key, notes, source)
         values (${match.benefit_id}, ${match.amount_used_cents}, ${match.period_key},
-                'Auto-synced from budget dashboard', 'budget_sync')
+                'Auto-synced from Lucent', 'budget_sync')
       `
       benefitsSynced++
     }
+
+    const creditsMatched = benefitMatches.reduce(
+      (sum, match) => sum + match.transaction_count,
+      0
+    )
+    const capturedCents = benefitMatches.reduce(
+      (sum, match) => sum + match.amount_used_cents,
+      0
+    )
 
     await sql`
       insert into sync_log (type, records_processed, records_updated, error)
@@ -109,6 +126,8 @@ async function handleSync() {
       offers_updated: offersUpdated,
       offers_completed: offersCompleted,
       benefits_synced: benefitsSynced,
+      credits_matched: creditsMatched,
+      captured_cents: capturedCents,
       synced_at: syncedAt,
     })
   } catch (err) {

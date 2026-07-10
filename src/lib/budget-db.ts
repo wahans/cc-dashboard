@@ -17,6 +17,7 @@ export async function getAmexTransactions(): Promise<BudgetTransaction[]> {
     WHERE a."accountName" = 'Amex Platinum Card'
       AND t.type IN ('DEBIT', 'CREDIT')
       AND t.hidden = false
+      AND t.pending = false
     ORDER BY t.date ASC
   `
   return rows as BudgetTransaction[]

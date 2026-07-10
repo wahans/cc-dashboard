@@ -27,7 +27,11 @@ export function BudgetSyncButton({ lastSyncedAt }: { lastSyncedAt: string | null
       if (!res.ok) {
         setResult(`Error: ${data.error}`)
       } else {
-        setResult(`Synced: ${data.offers_updated} offers · ${data.benefits_synced} benefits`)
+        const captured = (data.captured_cents / 100).toLocaleString('en-US', {
+          style: 'currency',
+          currency: 'USD',
+        })
+        setResult(`${data.transactions_processed} reviewed · ${data.credits_matched} credits · ${captured} captured`)
         router.refresh()
       }
     } catch {
@@ -52,7 +56,7 @@ export function BudgetSyncButton({ lastSyncedAt }: { lastSyncedAt: string | null
         disabled={syncing}
         className="text-[12px] font-medium border border-gray-200 rounded px-3 py-1.5 text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-40"
       >
-        {syncing ? 'Syncing…' : 'Sync transactions'}
+        {syncing ? 'Syncing…' : 'Sync with Lucent'}
       </button>
     </div>
   )

@@ -28,20 +28,25 @@ export function computeOfferSpend(
 
 // ─── Benefit matching ─────────────────────────────────────────────────────────
 
-// Maps benefit name → normalized description substrings to match
+// Only explicit Amex benefit-credit labels belong here. Merchant refunds and
+// card payments are credits too, so matching a merchant name alone is unsafe.
 const BENEFIT_PATTERNS: Record<string, string[]> = {
-  'Digital Entertainment': ['disney', 'peacock', 'espn', 'nytimes', 'hulu', 'spotify', 'paramount', 'appletv', 'wsj', 'amcplus', 'appleone', 'entertainment credit', 'digital entertainment'],
-  'Resy Credit':           ['resy'],
-  'lululemon Credit':      ['lululemon'],
-  'Uber Cash':             ['uber'],
-  'Walmart+':              ['walmart'],
-  'Saks':                  ['saks'],
-  'Airline Fee Credit':    ['airline fee credit', 'airline incidental', 'alaska', 'delta', 'united', 'americanair', 'southwest', 'jetblue', 'frontier'],
-  'CLEAR+':                ['clearme', 'clear'],
-  'Equinox':               ['equinox'],
-  'Oura Ring':             ['oura'],
-  // Hotel Credit: AmexTravel only — undetectable from generic transaction descriptions
-  // Global Entry / TSA PreCheck: rare, undetectable reliably
+  'Digital Entertainment': ['platinum digital entertainment credit'],
+  'Resy Credit': ['platinum resy credit'],
+  'lululemon Credit': ['platinum lululemon credit'],
+  'Walmart+ Credit': ['platinum walmart credit'],
+  'Walmart+': ['platinum walmart credit'],
+  'Saks Fifth Avenue': ['platinum saks credit'],
+  'Saks': ['platinum saks credit'],
+  'Hotel Credit': ['platinum hotel credit'],
+  'Airline Fee Credit': ['platinum airline fee credit'],
+  'CLEAR+ Credit': ['platinum clear credit'],
+  'CLEAR+': ['platinum clear credit'],
+  'Equinox/SoulCycle': ['platinum equinox credit'],
+  'Equinox': ['platinum equinox credit'],
+  'Oura Ring Credit': ['platinum oura ring credit'],
+  'Oura Ring': ['platinum oura ring credit'],
+  'Global Entry / TSA': ['platinum global entry credit', 'platinum tsa precheck credit'],
 }
 
 export type BenefitMatchResult = {
@@ -49,6 +54,7 @@ export type BenefitMatchResult = {
   benefit_name: string
   period_key: string
   amount_used_cents: number  // capped at benefit.amount_cents
+  transaction_count: number
 }
 
 type BenefitRow = {
@@ -60,60 +66,43 @@ type BenefitRow = {
 
 export function matchBenefitsToTransactions(
   benefits: BenefitRow[],
-  transactions: BudgetTransaction[]
+  transactions: BudgetTransaction[],
+  year: number = new Date().getUTCFullYear()
 ): BenefitMatchResult[] {
   const results: BenefitMatchResult[] = []
-  const now = new Date()
 
   for (const benefit of benefits) {
     const patterns = BENEFIT_PATTERNS[benefit.name]
     if (!patterns) continue
 
-    const periodKey = getPeriodKey(benefit.reset_period, now)
+    const matchesByPeriod = new Map<string, { cents: number; count: number }>()
+    for (const transaction of transactions) {
+      const transactionDate = new Date(transaction.date)
+      if (transactionDate.getUTCFullYear() !== year || transaction.type !== 'CREDIT') continue
 
-    // Determine period start date so we only look at current-period transactions
-    const periodStart = getPeriodStart(benefit.reset_period, now)
+      const description = normalizeMerchant(transaction.description)
+      const isBenefitCredit = patterns.some((pattern) =>
+        description.includes(normalizeMerchant(pattern))
+      )
+      if (!isBenefitCredit) continue
 
-    // Only credits pay down the annual fee. Spend is useful for offer progress,
-    // but it is not value captured until Amex actually credits the account.
-    const matchedCents = transactions
-      .filter((t) => {
-        if (new Date(t.date) < periodStart) return false
-        if (t.type !== 'CREDIT') return false
-        const desc = normalizeMerchant(t.description)
-        return patterns.some((p) => desc.includes(normalizeMerchant(p)))
-      })
-      .reduce((sum, t) => sum + Math.round(t.amount * 100), 0)
-
-    if (matchedCents === 0) continue
-
-    results.push({
-      benefit_id: benefit.id,
-      benefit_name: benefit.name,
-      period_key: periodKey,
-      amount_used_cents: Math.min(matchedCents, benefit.amount_cents),
-    })
-  }
-
-  return results
-}
-
-// Returns the start of the current reset period for a given date
-function getPeriodStart(resetPeriod: ResetPeriod, date: Date): Date {
-  const year = date.getUTCFullYear()
-  const month = date.getUTCMonth() // 0-indexed
-
-  switch (resetPeriod) {
-    case 'monthly':
-      return new Date(Date.UTC(year, month, 1))
-    case 'quarterly': {
-      const qStartMonth = Math.floor(month / 3) * 3
-      return new Date(Date.UTC(year, qStartMonth, 1))
+      const periodKey = getPeriodKey(benefit.reset_period, transactionDate)
+      const existing = matchesByPeriod.get(periodKey) ?? { cents: 0, count: 0 }
+      existing.cents += Math.round(transaction.amount * 100)
+      existing.count += 1
+      matchesByPeriod.set(periodKey, existing)
     }
-    case 'semi-annual':
-      return new Date(Date.UTC(year, month < 6 ? 0 : 6, 1))
-    case 'annual':
-    case '4-year':
-      return new Date(Date.UTC(year, 0, 1))
+
+    for (const [periodKey, match] of matchesByPeriod) {
+      results.push({
+        benefit_id: benefit.id,
+        benefit_name: benefit.name,
+        period_key: periodKey,
+        amount_used_cents: Math.min(match.cents, benefit.amount_cents),
+        transaction_count: match.count,
+      })
+    }
   }
+
+  return results.sort((a, b) => a.period_key.localeCompare(b.period_key))
 }
