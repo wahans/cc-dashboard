@@ -20,6 +20,7 @@ export function computeOfferSpend(
     .filter(
       (t) =>
         new Date(t.date) >= enrolledDate &&
+        t.type === 'DEBIT' &&
         normalizeMerchant(t.description).includes(norm)
     )
     .reduce((sum, t) => sum + Math.round(t.amount * 100), 0)
@@ -29,13 +30,13 @@ export function computeOfferSpend(
 
 // Maps benefit name → normalized description substrings to match
 const BENEFIT_PATTERNS: Record<string, string[]> = {
-  'Digital Entertainment': ['disney', 'peacock', 'espn', 'nytimes', 'hulu', 'spotify', 'paramount', 'appletv', 'wsj', 'amcplus', 'appleone'],
+  'Digital Entertainment': ['disney', 'peacock', 'espn', 'nytimes', 'hulu', 'spotify', 'paramount', 'appletv', 'wsj', 'amcplus', 'appleone', 'entertainment credit', 'digital entertainment'],
   'Resy Credit':           ['resy'],
   'lululemon Credit':      ['lululemon'],
   'Uber Cash':             ['uber'],
   'Walmart+':              ['walmart'],
   'Saks':                  ['saks'],
-  'Airline Fee Credit':    ['alaska', 'delta', 'united', 'americanair', 'southwest', 'jetblue', 'frontier'],
+  'Airline Fee Credit':    ['airline fee credit', 'airline incidental', 'alaska', 'delta', 'united', 'americanair', 'southwest', 'jetblue', 'frontier'],
   'CLEAR+':                ['clearme', 'clear'],
   'Equinox':               ['equinox'],
   'Oura Ring':             ['oura'],
@@ -73,12 +74,14 @@ export function matchBenefitsToTransactions(
     // Determine period start date so we only look at current-period transactions
     const periodStart = getPeriodStart(benefit.reset_period, now)
 
-    // Sum debits in this period that match any pattern
+    // Only credits pay down the annual fee. Spend is useful for offer progress,
+    // but it is not value captured until Amex actually credits the account.
     const matchedCents = transactions
       .filter((t) => {
         if (new Date(t.date) < periodStart) return false
+        if (t.type !== 'CREDIT') return false
         const desc = normalizeMerchant(t.description)
-        return patterns.some((p) => desc.includes(p))
+        return patterns.some((p) => desc.includes(normalizeMerchant(p)))
       })
       .reduce((sum, t) => sum + Math.round(t.amount * 100), 0)
 

@@ -5,6 +5,7 @@ export type BudgetTransaction = {
   date: Date
   amount: number      // positive float, dollars
   description: string
+  type: 'DEBIT' | 'CREDIT'
 }
 
 export async function getAmexTransactions(): Promise<BudgetTransaction[]> {
@@ -14,7 +15,7 @@ export async function getAmexTransactions(): Promise<BudgetTransaction[]> {
     FROM "Transaction" t
     JOIN "PlaidAccount" a ON t."accountId" = a.id
     WHERE a."accountName" = 'Amex Platinum Card'
-      AND t.type = 'DEBIT'
+      AND t.type IN ('DEBIT', 'CREDIT')
       AND t.hidden = false
     ORDER BY t.date ASC
   `

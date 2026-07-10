@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getBenefitGuidance } from '@/lib/benefit-value'
 
 type BenefitSummary = {
   id: string
@@ -55,6 +56,7 @@ export function BenefitsSummaryPanel({ benefits }: { benefits: BenefitSummary[] 
         const daysLeft = Math.max(0, daysUntil(b.period_ends))
         const catColor = CATEGORY_COLORS[b.category] ?? CATEGORY_COLORS.other
         const isFullyUsed = b.remaining_cents === 0
+        const guidance = getBenefitGuidance(b.name)
 
         return (
           <div key={b.id} className="px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/40 transition-colors">
@@ -82,7 +84,7 @@ export function BenefitsSummaryPanel({ benefits }: { benefits: BenefitSummary[] 
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-gray-400">{pct}% used</span>
+              <span className={`text-[11px] ${guidance.priority === 'skip' ? 'text-slate-500' : 'text-gray-400'}`}>{guidance.label}</span>
               <span className={`text-[11px] ${daysLeft <= 7 ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
                 {daysLeft}d left in period
               </span>

@@ -7,7 +7,9 @@ import { ExpiringOffersPanel } from '@/components/dashboard/ExpiringOffersPanel'
 import { BenefitsSummaryPanel } from '@/components/dashboard/BenefitsSummaryPanel'
 import { BudgetSyncButton } from '@/components/dashboard/BudgetSyncButton'
 import { SyncHistoryPanel } from '@/components/dashboard/SyncHistoryPanel'
+import { FeePayoffPanel } from '@/components/dashboard/FeePayoffPanel'
 import type { SyncLogRow } from '@/types/sync'
+import { ANNUAL_FEE_CENTS } from '@/lib/benefit-value'
 
 export const metadata: Metadata = { title: 'Dashboard' }
 
@@ -137,19 +139,6 @@ export default async function DashboardPage() {
     (sum, u) => sum + (u.amount_used_cents as number), 0
   )
 
-  const { data: completedOffers } = await supabase
-    .from('enrolled_offers')
-    .select('amex_offers(reward_amount_cents)')
-    .eq('threshold_met', true)
-
-  const offersYTDCents = (completedOffers ?? []).reduce((sum, row) => {
-    const raw = row.amex_offers
-    const o = Array.isArray(raw) ? raw[0] : raw
-    return sum + ((o as { reward_amount_cents?: number } | null)?.reward_amount_cents ?? 0)
-  }, 0)
-
-  const valueCapturedYTDCents = benefitYTDCents + offersYTDCents
-
   const { data: lastSyncRow } = await supabase
     .from('benefit_usage')
     .select('created_at')
@@ -175,6 +164,7 @@ export default async function DashboardPage() {
         </div>
         <BudgetSyncButton lastSyncedAt={lastBudgetSync} />
       </div>
+      <FeePayoffPanel capturedCents={Math.min(ANNUAL_FEE_CENTS, benefitYTDCents)} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Enrolled Offers" value={(enrolledOffersCount ?? 0).toString()}
   accent="blue" />
@@ -189,8 +179,8 @@ export default async function DashboardPage() {
         />
         <StatCard label="Benefits Remaining" value={formatDollars(benefitsRemainingCents)}
   subtext="this period" accent="green" />
-        <StatCard label="Value Captured YTD" value={formatDollars(valueCapturedYTDCents)}
-  accent="default" />
+        <StatCard label="Credits Captured YTD" value={formatDollars(benefitYTDCents)}
+  subtext="actual benefit value" accent="default" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <BenefitsSummaryPanel benefits={benefitsSummary} />

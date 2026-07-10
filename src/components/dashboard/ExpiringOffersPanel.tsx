@@ -132,7 +132,7 @@ export function ExpiringOffersPanel({
       {enrolledOffers.length > 0 && unenrolledOffers.length > 0 && (
         <div className="flex items-center gap-3 py-1.5 px-4 bg-blue-50/40 border-b border-blue-100">
           <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-[0.8px]">
-            Enroll before they're gone
+            Enroll before they&apos;re gone
           </span>
         </div>
       )}

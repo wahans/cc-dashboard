@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
+import { getBenefitGuidance } from '@/lib/benefit-value'
 
 export type Benefit = {
   id: string
@@ -52,6 +53,7 @@ export function BenefitCard({ benefit: initial }: Props) {
   const pct = Math.min(100, Math.round((benefit.used_cents / benefit.amount_cents) * 100))
   const isFullyUsed = benefit.remaining_cents === 0
   const needsEnrollment = !enrolled && benefit.enrollment_required
+  const guidance = getBenefitGuidance(benefit.name)
 
   async function markFullyUsed() {
     if (benefit.remaining_cents <= 0) return
@@ -100,7 +102,7 @@ export function BenefitCard({ benefit: initial }: Props) {
   }
 
   return (
-    <Card className={needsEnrollment ? 'border-amber-400 bg-amber-50' : isFullyUsed ? 'border-green-400 bg-green-50' : ''}>
+    <Card className={needsEnrollment ? 'border-amber-400 bg-amber-50' : guidance.priority === 'skip' ? 'border-slate-200 bg-slate-50/70' : isFullyUsed ? 'border-green-400 bg-green-50' : ''}>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-sm font-semibold leading-tight">{benefit.name}</CardTitle>
@@ -119,6 +121,10 @@ export function BenefitCard({ benefit: initial }: Props) {
         {benefit.description && (
           <p className="text-xs text-muted-foreground mt-1">{benefit.description}</p>
         )}
+        <div className={`mt-2 rounded-md px-2.5 py-2 text-xs ${guidance.priority === 'skip' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-800'}`}>
+          <p className="font-semibold">{guidance.label}</p>
+          <p className="mt-0.5">{guidance.action}. {guidance.reason}</p>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
