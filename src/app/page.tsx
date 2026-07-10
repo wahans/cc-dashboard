@@ -12,6 +12,7 @@ import type { SyncLogRow } from '@/types/sync'
 import { ANNUAL_FEE_CENTS } from '@/lib/benefit-value'
 
 export const metadata: Metadata = { title: 'Dashboard' }
+export const dynamic = 'force-dynamic'
 
 function formatDollars(cents: number): string {
   if (cents >= 100000) return `$${(cents / 100000).toFixed(1)}k`
