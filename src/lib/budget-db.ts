@@ -11,7 +11,7 @@ export type BudgetTransaction = {
 export async function getAmexTransactions(): Promise<BudgetTransaction[]> {
   const sql = neon(process.env.BUDGET_DATABASE_URL!)
   const rows = await sql`
-    SELECT t.id, t.date, t.amount, t.description
+    SELECT t.id, t.date, t.amount, t.description, t.type
     FROM "Transaction" t
     JOIN "PlaidAccount" a ON t."accountId" = a.id
     WHERE a."accountName" = 'Amex Platinum Card'
