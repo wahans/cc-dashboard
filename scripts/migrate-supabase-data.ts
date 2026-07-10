@@ -41,6 +41,7 @@ async function fetchTable(table: string): Promise<Record<string, unknown>[]> {
 
 async function copyTable(pool: Pool, table: string, rows: Record<string, unknown>[]) {
   if (rows.length === 0) {
+    await pool.query(`delete from ${quoteIdentifier(table)}`)
     console.log(`${table}: 0 rows`)
     return
   }
@@ -52,15 +53,25 @@ async function copyTable(pool: Pool, table: string, rows: Record<string, unknown
     .map((column) => `${quoteIdentifier(column)} = excluded.${quoteIdentifier(column)}`)
     .join(', ')
 
-  for (const row of rows) {
-    const values = columns.map((column) => row[column] ?? null)
-    const placeholders = values.map((_, index) => `$${index + 1}`).join(', ')
+  const batchSize = 250
+  for (let start = 0; start < rows.length; start += batchSize) {
+    const batch = rows.slice(start, start + batchSize)
+    const values = batch.flatMap((row) => columns.map((column) => row[column] ?? null))
+    const valueGroups = batch.map((_, rowIndex) => {
+      const offset = rowIndex * columns.length
+      return `(${columns.map((_, columnIndex) => `$${offset + columnIndex + 1}`).join(', ')})`
+    })
     await pool.query(
-      `insert into ${quoteIdentifier(table)} (${columnSql}) values (${placeholders})
+      `insert into ${quoteIdentifier(table)} (${columnSql}) values ${valueGroups.join(', ')}
        on conflict ("id") do update set ${updateSql}`,
       values,
     )
   }
+  const ids = rows.map((row) => row.id).filter((id): id is string => typeof id === 'string')
+  await pool.query(
+    `delete from ${quoteIdentifier(table)} where not ("id" = any($1::uuid[]))`,
+    [ids],
+  )
   console.log(`${table}: ${rows.length} rows`)
 }
 
