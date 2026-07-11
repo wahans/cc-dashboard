@@ -1,4 +1,4 @@
-import { matchBenefitsToTransactions } from '@/lib/transaction-matcher'
+import { getUnmatchedCreditsForReview, matchBenefitsToTransactions } from '@/lib/transaction-matcher'
 
 describe('matchBenefitsToTransactions', () => {
   const benefits = [
@@ -81,6 +81,7 @@ describe('matchBenefitsToTransactions', () => {
       expect.objectContaining({ benefit_name: 'lululemon Credit', period_key: '2026-Q1', amount_used_cents: 7500 }),
     ]))
     expect(matches.reduce((sum, match) => sum + match.amount_used_cents, 0)).toBe(44215)
+    expect(matches.flatMap((match) => match.matched_transactions)).toHaveLength(5)
   })
 
   it('does not count returns or card payments as benefit credits', () => {
@@ -103,5 +104,18 @@ describe('matchBenefitsToTransactions', () => {
       expect.objectContaining({ period_key: '2026-03', amount_used_cents: 299 }),
       expect.objectContaining({ period_key: '2026-07', amount_used_cents: 1200 }),
     ]))
+  })
+
+  it('surfaces unmatched refunds for review but omits card payments', () => {
+    const transactions = [
+      { id: 'benefit', date: new Date('2026-06-24'), amount: 14.16, description: 'Platinum Walmart+ Credit', type: 'CREDIT' as const },
+      { id: 'return', date: new Date('2026-05-13'), amount: 208.76, description: 'TARGET 003210 REDWOOD CITY CA', type: 'CREDIT' as const },
+      { id: 'payment', date: new Date('2026-06-09'), amount: 5021.85, description: 'AUTOPAY PAYMENT - THANK YOU', type: 'CREDIT' as const },
+    ]
+    const matches = matchBenefitsToTransactions(benefits, transactions, 2026)
+
+    expect(getUnmatchedCreditsForReview(transactions, matches, 2026)).toEqual([
+      expect.objectContaining({ id: 'return', amount_cents: 20876 }),
+    ])
   })
 })

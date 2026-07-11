@@ -35,10 +35,13 @@ export async function POST(req: NextRequest) {
     const notes = txn.description
     const amount_cents = Math.round(txn.amount * 100)
 
-    // Dedup: check if this exact usage record already exists
+    // Dedup: exact CSV/manual match, or any Lucent reconciliation for the
+    // benefit period. Lucent records are aggregated, so importing the same
+    // statement credit separately would double-count captured value.
     const [existing] = await sql`
       select id from benefit_usage
-      where benefit_id = ${benefit.id} and period_key = ${periodKey} and notes = ${notes}
+      where benefit_id = ${benefit.id} and period_key = ${periodKey}
+        and (notes = ${notes} or source = 'budget_sync')
       limit 1
     `
 

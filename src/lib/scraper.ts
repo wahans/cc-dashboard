@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio'
+import { isOfferNoise } from './offer-display'
 
 export type ScrapedOffer = {
   merchant: string
@@ -7,12 +8,6 @@ export type ScrapedOffer = {
   reward_amount_cents: number | null
   reward_type: 'cash' | 'points'
   expiration_date: string | null
-}
-
-function parseDollarCents(text: string): number | null {
-  const match = text.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/)
-  if (!match) return null
-  return Math.round(parseFloat(match[1].replace(/,/g, '')) * 100)
 }
 
 function parsePercentBack(text: string, spendMin: number | null): number | null {
@@ -198,7 +193,7 @@ export async function scrapeFrequentMilerOffers(): Promise<ScrapedOffer[]> {
 
   for (const [col1Html, col2Date] of allRows) {
     const offer = parseRow(col1Html, col2Date)
-    if (!offer || !offer.merchant || offer.reward_amount_cents === null) continue
+    if (!offer || !offer.merchant || offer.reward_amount_cents === null || isOfferNoise(offer.merchant)) continue
 
     const key = offerKey(offer)
     if (!seen.has(key)) {

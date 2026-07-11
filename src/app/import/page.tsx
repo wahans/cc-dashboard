@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import Link from 'next/link'
 
 type BenefitMatch = {
   benefit_id: string
@@ -100,15 +101,25 @@ export default function ImportPage() {
   return (
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Import Transactions</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Upload your Amex CSV to detect benefit usage and offer progress.
+          <h1 className="text-xl font-semibold text-gray-900 text-balance">Fallback CSV Import</h1>
+          <p className="text-sm text-gray-500 mt-1 text-pretty">
+            Use this only when Lucent is missing Amex transactions. Normal benefit tracking happens through Sync with Lucent.
           </p>
+        </div>
+
+        <div className="border border-blue-200 bg-blue-50 rounded-lg p-4">
+          <p className="text-sm font-semibold text-blue-900">Try Lucent sync first</p>
+          <p className="text-xs text-blue-800 mt-1 text-pretty">
+            CSV matches are skipped when the same benefit period is already represented by Lucent, preventing duplicate captured value.
+          </p>
+          <Link href="/" className="inline-block text-xs text-blue-700 font-semibold mt-2 hover:text-blue-900">
+            Return to dashboard →
+          </Link>
         </div>
 
         {stage === 'idle' && (
           <div className="border-2 border-dashed border-gray-200 rounded-xl p-10 text-center">
-            <p className="text-sm text-gray-500 mb-4">Select your Amex CSV file</p>
+            <p className="text-sm text-gray-500 mb-4">Select a missing-period Amex CSV file</p>
             <label className="cursor-pointer inline-block bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
               Choose file
               <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />

@@ -9,7 +9,9 @@ import { SyncHistoryPanel } from '@/components/dashboard/SyncHistoryPanel'
 import { FeePayoffPanel } from '@/components/dashboard/FeePayoffPanel'
 import type { SyncLogRow } from '@/types/sync'
 import { ANNUAL_FEE_CENTS } from '@/lib/benefit-value'
-import { selectDiverseOffers } from '@/lib/offer-display'
+import { countDistinctOfferMerchants, selectDiverseOffers } from '@/lib/offer-display'
+import { SyncDetailsPanel } from '@/components/dashboard/SyncDetailsPanel'
+import type { SyncDetails } from '@/types/sync'
 
 export const metadata: Metadata = { title: 'Dashboard' }
 export const dynamic = 'force-dynamic'
@@ -49,10 +51,12 @@ export default async function DashboardPage() {
   )
 
   const allExpiring = await sql`
-    select id from amex_offers
+    select id, merchant from amex_offers
     where active = true and expiration_date >= ${today} and expiration_date <= ${in14}
   `
-  const unenrolledExpiringCount = allExpiring.filter((o) => !enrolledSet.has(o.id)).length
+  const unenrolledExpiringCount = countDistinctOfferMerchants(
+    allExpiring.filter((offer) => !enrolledSet.has(offer.id)) as Array<{ merchant: string }>
+  )
 
   const rawEnrolledExpiring = await sql`
     select e.id, e.spent_amount_cents, o.merchant, o.reward_amount_cents,
@@ -116,9 +120,10 @@ export default async function DashboardPage() {
   const lastBudgetSync = lastSyncRow?.created_at ?? null
 
   const syncLogRows = await sql`
-    select id, type, ran_at, records_processed, records_updated, error
+    select id, type, ran_at, records_processed, records_updated, error, details
     from sync_log order by ran_at desc limit 20
   `
+  const latestBudgetSync = syncLogRows.find((row) => row.type === 'budget_sync' && row.details)
 
   return (
     <div className="max-w-[1100px] mx-auto px-6 py-6 space-y-6">
@@ -151,6 +156,10 @@ export default async function DashboardPage() {
         <BenefitsSummaryPanel benefits={benefitsSummary} />
         <ExpiringOffersPanel unenrolledOffers={expiringOffers} enrolledOffers={enrolledExpiringOffers} />
       </div>
+      <SyncDetailsPanel
+        details={(latestBudgetSync?.details as SyncDetails | null) ?? null}
+        syncedAt={(latestBudgetSync?.ran_at as string | null) ?? null}
+      />
       <SyncHistoryPanel rows={(syncLogRows ?? []) as SyncLogRow[]} />
     </div>
   )

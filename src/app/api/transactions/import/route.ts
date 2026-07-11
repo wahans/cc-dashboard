@@ -25,10 +25,12 @@ export async function POST(req: NextRequest) {
     const periodKey = getPeriodKey(benefit.reset_period as ResetPeriod, txnDate)
     const notes = txn.description
 
-    // Dedup check
+    // Treat Lucent-reconciled benefit periods as already imported. Lucent
+    // records are aggregated, so a separate CSV row would duplicate value.
     const [existing] = await sql`
       select id from benefit_usage
-      where benefit_id = ${benefit.id} and period_key = ${periodKey} and notes = ${notes}
+      where benefit_id = ${benefit.id} and period_key = ${periodKey}
+        and (notes = ${notes} or source = 'budget_sync')
       limit 1
     `
 

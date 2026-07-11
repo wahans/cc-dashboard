@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-
-const PAGE_SIZE = 1000
+import { isOfferNoise } from '@/lib/offer-display'
 
 export async function GET(req: NextRequest) {
   const enrolledOnly = req.nextUrl.searchParams.get('enrolled') === 'true'
@@ -14,7 +13,7 @@ export async function GET(req: NextRequest) {
     order by o.reward_amount_cents desc
   `
 
-  const offers = allData.map((o) => ({
+  const offers = allData.filter((offer) => !isOfferNoise(String(offer.merchant))).map((o) => ({
     ...o,
     is_enrolled: Boolean(o.enrollment_id),
     enrollment: o.enrollment_id ? {

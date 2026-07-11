@@ -18,6 +18,7 @@ export type Benefit = {
   enrollment_required: boolean
   enrollment_url?: string
   current_period_key: string
+  usage_timeframe?: 'year'
   used_cents: number
   remaining_cents: number
 }
@@ -135,8 +136,8 @@ export function BenefitCard({ benefit: initial }: Props) {
             </span>
           </div>
           <Progress value={pct} className="h-2" />
-          <p className="text-xs text-muted-foreground">
-            {dollars(benefit.amount_cents)} total · resets {benefit.reset_period} · {benefit.current_period_key}
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {dollars(benefit.amount_cents)} annual value · {benefit.current_period_key} YTD
           </p>
         </div>
 

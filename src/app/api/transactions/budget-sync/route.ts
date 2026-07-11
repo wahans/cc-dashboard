@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 // NextRequest used only for GET (cron auth)
 import { sql } from '@/lib/db'
 import { getAmexTransactions } from '@/lib/budget-db'
-import { computeOfferSpend, matchBenefitsToTransactions } from '@/lib/transaction-matcher'
+import { computeOfferSpend, getUnmatchedCreditsForReview, matchBenefitsToTransactions } from '@/lib/transaction-matcher'
 import type { ResetPeriod } from '@/lib/benefits'
+import { hasValidSiteSession, SITE_AUTH_COOKIE } from '@/lib/auth'
 
 // Vercel cron sends GET — requires CRON_SECRET
 export async function GET(req: NextRequest) {
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
 // validate the same cookie here before allowing a database reconciliation.
 export async function POST(req: NextRequest) {
   const sitePassword = process.env.SITE_PASSWORD
-  if (sitePassword && req.cookies.get('site-auth')?.value !== sitePassword) {
+  if (!hasValidSiteSession(req.cookies.get(SITE_AUTH_COOKIE)?.value, sitePassword)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   return handleSync()
@@ -115,10 +116,26 @@ async function handleSync() {
       (sum, match) => sum + match.amount_used_cents,
       0
     )
+    const matchedCredits = benefitMatches.flatMap((match) =>
+      match.matched_transactions.map((transaction) => ({
+        ...transaction,
+        benefit_name: match.benefit_name,
+      }))
+    ).sort((a, b) => b.date.localeCompare(a.date))
+    const unmatchedCredits = getUnmatchedCreditsForReview(
+      transactions,
+      benefitMatches,
+      syncYear
+    )
+    const details = {
+      matched_credits: matchedCredits,
+      unmatched_credits: unmatchedCredits,
+    }
 
     await sql`
-      insert into sync_log (type, records_processed, records_updated, error)
-      values ('budget_sync', ${transactions.length}, ${offersUpdated + benefitsSynced}, null)
+      insert into sync_log (type, records_processed, records_updated, error, details)
+      values ('budget_sync', ${transactions.length}, ${offersUpdated + benefitsSynced}, null,
+              ${JSON.stringify(details)}::jsonb)
     `
 
     return NextResponse.json({
@@ -128,6 +145,7 @@ async function handleSync() {
       benefits_synced: benefitsSynced,
       credits_matched: creditsMatched,
       captured_cents: capturedCents,
+      details,
       synced_at: syncedAt,
     })
   } catch (err) {
