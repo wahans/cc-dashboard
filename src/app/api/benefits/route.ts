@@ -9,10 +9,13 @@ export async function GET() {
   const now = new Date()
   const currentYear = now.getUTCFullYear()
   const annotated = (benefits ?? []).map((b) => {
-    const usedCents = getYearUsageCents(
-      b.id as string,
-      usage as Array<{ benefit_id: string; period_key: string; amount_used_cents: number }>,
-      currentYear
+    const usedCents = Math.min(
+      Number(b.amount_cents),
+      getYearUsageCents(
+        b.id as string,
+        usage as Array<{ benefit_id: string; period_key: string; amount_used_cents: number }>,
+        currentYear
+      )
     )
     return {
       ...b,

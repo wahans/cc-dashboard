@@ -85,10 +85,13 @@ export default async function DashboardPage() {
   const usage = await sql`select * from benefit_usage`
 
   const benefitsSummary = benefits.map((b) => {
-    const usedCents = getYearUsageCents(
-      b.id as string,
-      usage as Array<{ benefit_id: string; period_key: string; amount_used_cents: number }>,
-      currentYear
+    const usedCents = Math.min(
+      Number(b.amount_cents),
+      getYearUsageCents(
+        b.id as string,
+        usage as Array<{ benefit_id: string; period_key: string; amount_used_cents: number }>,
+        currentYear
+      )
     )
     const remainingCents = Math.max(0, b.amount_cents - usedCents)
     return {
@@ -106,10 +109,9 @@ export default async function DashboardPage() {
 
   const benefitsRemainingCents = benefitsSummary.reduce((sum, b) => sum + b.remaining_cents, 0)
 
-  const benefitYTDCents = usage
-    .filter((item) => String(item.period_key).startsWith(String(currentYear)))
-    .reduce(
-      (sum, item) => sum + Number(item.amount_used_cents), 0
+  const benefitYTDCents = benefitsSummary.reduce(
+    (sum, benefit) => sum + benefit.used_cents,
+    0
   )
 
   const [lastSyncRow] = await sql`

@@ -40,10 +40,13 @@ export async function GET() {
   const benefits = await sql`select * from amex_benefits where active = true order by sort_order`
   const usage = await sql`select * from benefit_usage`
   const benefitsSummary = benefits.map((benefit) => {
-    const usedCents = getYearUsageCents(
-      benefit.id as string,
-      usage as Array<{ benefit_id: string; period_key: string; amount_used_cents: number }>,
-      currentYear
+    const usedCents = Math.min(
+      Number(benefit.amount_cents),
+      getYearUsageCents(
+        benefit.id as string,
+        usage as Array<{ benefit_id: string; period_key: string; amount_used_cents: number }>,
+        currentYear
+      )
     )
     return {
       id: benefit.id,
@@ -56,9 +59,10 @@ export async function GET() {
     }
   }).filter((benefit) => benefit.enrolled || benefit.used_cents > 0)
 
-  const benefitYTDCents = usage
-    .filter((item) => String(item.period_key).startsWith(String(currentYear)))
-    .reduce((sum, item) => sum + Number(item.amount_used_cents), 0)
+  const benefitYTDCents = benefitsSummary.reduce(
+    (sum, benefit) => sum + benefit.used_cents,
+    0
+  )
 
   return NextResponse.json({
     stats: {
