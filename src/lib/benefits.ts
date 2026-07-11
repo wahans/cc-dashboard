@@ -22,6 +22,23 @@ export function getRemainingCents(totalCents: number, usedAmounts: number[]): nu
   return Math.max(0, totalCents - used)
 }
 
+type BenefitUsageRow = {
+  benefit_id: string
+  period_key: string
+  amount_used_cents: number
+}
+
+export function getYearUsageCents(
+  benefitId: string,
+  usage: BenefitUsageRow[],
+  year: number
+): number {
+  const yearPrefix = String(year)
+  return usage
+    .filter((item) => item.benefit_id === benefitId && item.period_key.startsWith(yearPrefix))
+    .reduce((sum, item) => sum + Number(item.amount_used_cents), 0)
+}
+
 export function getPeriodEnd(resetPeriod: ResetPeriod, date: Date = new Date()): Date {
   const year = date.getUTCFullYear()
   const month = date.getUTCMonth() // 0-indexed

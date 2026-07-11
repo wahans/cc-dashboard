@@ -1,4 +1,4 @@
-import { getPeriodKey, getRemainingCents, isExpiringSoon, getPeriodEnd } from '@/lib/benefits'
+import { getPeriodKey, getRemainingCents, getYearUsageCents, isExpiringSoon, getPeriodEnd } from '@/lib/benefits'
 
 describe('getPeriodKey', () => {
   it('returns YYYY-MM for monthly', () => {
@@ -26,6 +26,19 @@ describe('getRemainingCents', () => {
   })
   it('floors at 0 when over-used', () => {
     expect(getRemainingCents(10000, [12000])).toBe(0)
+  })
+})
+
+describe('getYearUsageCents', () => {
+  it('sums monthly, quarterly, semi-annual, and annual usage from the requested year', () => {
+    const usage = [
+      { benefit_id: 'hotel', period_key: '2026-H1', amount_used_cents: 30000 },
+      { benefit_id: 'hotel', period_key: '2026-H2', amount_used_cents: 5000 },
+      { benefit_id: 'hotel', period_key: '2025-H2', amount_used_cents: 10000 },
+      { benefit_id: 'other', period_key: '2026', amount_used_cents: 2000 },
+    ]
+
+    expect(getYearUsageCents('hotel', usage, 2026)).toBe(35000)
   })
 })
 

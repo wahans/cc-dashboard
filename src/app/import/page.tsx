@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Nav } from '@/components/nav'
 
 type BenefitMatch = {
   benefit_id: string
@@ -99,8 +98,6 @@ export default function ImportPage() {
   const hasNewContent = newMatches.length > 0 || (preview?.offer_matches.length ?? 0) > 0
 
   return (
-    <>
-      <Nav />
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Import Transactions</h1>
@@ -256,6 +253,5 @@ export default function ImportPage() {
           </div>
         )}
       </div>
-    </>
   )
 }

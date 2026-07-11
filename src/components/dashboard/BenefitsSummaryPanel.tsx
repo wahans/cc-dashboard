@@ -7,14 +7,7 @@ type BenefitSummary = {
   amount_cents: number
   used_cents: number
   remaining_cents: number
-  reset_period: string
-  period_ends: string
   category: string
-}
-
-function daysUntil(dateStr: string): number {
-  const diff = new Date(dateStr).getTime() - Date.now()
-  return Math.ceil(diff / (1000 * 60 * 60 * 24))
 }
 
 function formatDollars(cents: number): string {
@@ -36,7 +29,7 @@ export function BenefitsSummaryPanel({ benefits }: { benefits: BenefitSummary[] 
   if (benefits.length === 0) {
     return (
       <div className="border border-gray-200 rounded-lg p-6">
-        <h2 className="text-[14px] font-semibold text-gray-900 mb-4">Benefits This Period</h2>
+        <h2 className="text-[14px] font-semibold text-gray-900 mb-4 text-balance">Benefits Captured YTD</h2>
         <p className="text-[13px] text-gray-400">No enrolled benefits. Go to Benefits to enroll.</p>
       </div>
     )
@@ -46,14 +39,13 @@ export function BenefitsSummaryPanel({ benefits }: { benefits: BenefitSummary[] 
     <div className="border border-gray-200 rounded-lg overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-[#fafafa]">
-        <h2 className="text-[14px] font-semibold text-gray-900">Benefits This Period</h2>
-        <span className="text-[11px] text-gray-400">Enrolled only</span>
+        <h2 className="text-[14px] font-semibold text-gray-900 text-balance">Benefits Captured YTD</h2>
+        <span className="text-[11px] text-gray-400">Lucent + manual</span>
       </div>
 
       {/* Rows */}
       {benefits.map((b) => {
         const pct = b.amount_cents > 0 ? Math.min(100, Math.round((b.used_cents / b.amount_cents) * 100)) : 0
-        const daysLeft = Math.max(0, daysUntil(b.period_ends))
         const catColor = CATEGORY_COLORS[b.category] ?? CATEGORY_COLORS.other
         const isFullyUsed = b.remaining_cents === 0
         const guidance = getBenefitGuidance(b.name)
@@ -84,9 +76,9 @@ export function BenefitsSummaryPanel({ benefits }: { benefits: BenefitSummary[] 
             </div>
 
             <div className="flex items-center justify-between">
-              <span className={`text-[11px] ${guidance.priority === 'skip' ? 'text-slate-500' : 'text-gray-400'}`}>{guidance.label}</span>
-              <span className={`text-[11px] ${daysLeft <= 7 ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                {daysLeft}d left in period
+              <span className={`text-[11px] truncate ${guidance.priority === 'skip' ? 'text-slate-500' : 'text-gray-400'}`}>{guidance.label}</span>
+              <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
+                {formatDollars(b.used_cents)} of {formatDollars(b.amount_cents)}
               </span>
             </div>
           </div>

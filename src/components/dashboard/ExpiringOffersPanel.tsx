@@ -23,6 +23,7 @@ type ExpiringOffer = {
   expiration_date: string | null
   reward_type: string
   spent_amount_cents?: number
+  variant_count?: number
 }
 
 function formatReward(offer: ExpiringOffer): string {
@@ -144,7 +145,14 @@ export function ExpiringOffersPanel({
           <div key={offer.id}>
             {/* Desktop row */}
             <div className="hidden md:grid grid-cols-[1fr_80px_60px_80px_80px] items-center px-4 h-[44px] border-b border-gray-50 last:border-b-0 hover:bg-gray-50/60 transition-colors">
-              <p className="text-[13px] font-semibold text-gray-900 truncate">{offer.merchant}</p>
+              <div className="flex items-center gap-2 min-w-0">
+                <p className="text-[13px] font-semibold text-gray-900 truncate">{offer.merchant}</p>
+                {(offer.variant_count ?? 1) > 1 && (
+                  <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">
+                    +{offer.variant_count! - 1} variants
+                  </span>
+                )}
+              </div>
               <p className="text-[13px] font-bold text-green-700 tabular-nums text-right">{formatReward(offer)}</p>
               <p className="text-[12px] text-gray-500 tabular-nums text-right">{formatReturn(offer)}</p>
               <p className={`text-[12px] tabular-nums text-right ${days !== null && days <= 7 ? 'text-red-600 font-bold' : 'text-gray-400'}`}>
@@ -157,7 +165,12 @@ export function ExpiringOffersPanel({
             {/* Mobile card */}
             <div className="md:hidden px-4 py-2.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/60 transition-colors">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[14px] font-semibold text-gray-900 truncate flex-1">{offer.merchant}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-semibold text-gray-900 truncate">{offer.merchant}</p>
+                  {(offer.variant_count ?? 1) > 1 && (
+                    <p className="text-[10px] text-gray-400 tabular-nums">+{offer.variant_count! - 1} variants</p>
+                  )}
+                </div>
                 <span className="text-[14px] font-bold text-green-700 tabular-nums shrink-0">{formatReward(offer)}</span>
               </div>
               <div className="flex items-center justify-between mt-0.5">
